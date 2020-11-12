@@ -51,8 +51,11 @@
 
 %end
 
+
 id currentlyHostedAppController = nil;
 id carplayExternalDisplay = nil;
+int lastOrientation = -1;
+
 
 %hook SpringBoard
 
@@ -88,12 +91,11 @@ id carplayExternalDisplay = nil;
 	}
 
 	id displayConfiguration = ((id (*)(id, SEL, id, int))objc_msgSend)([objc_getClass("FBSDisplayConfiguration") alloc], NSSelectorFromString(@"initWithCADisplay:isMainDisplay:"), carplayExternalDisplay, 0);
-	id displayIdentity = objcInvoke(displayConfiguration, @"identity");
 
 	id displaySceneManager = objcInvoke(objc_getClass("SBSceneManagerCoordinator"), @"mainDisplaySceneManager");
 
 	id sceneIdentity = ((id (*)(id, SEL, id, int))objc_msgSend)(displaySceneManager, NSSelectorFromString(@"_sceneIdentityForApplication:createPrimaryIfRequired:"), targetApp, 1);
-	id sceneHandleRequest = ((id (*)(id, SEL, id, id, id))objc_msgSend)(objc_getClass("SBApplicationSceneHandleRequest"), NSSelectorFromString(@"defaultRequestForApplication:sceneIdentity:displayIdentity:"), targetApp, sceneIdentity, displayIdentity);
+	id sceneHandleRequest = ((id (*)(id, SEL, id, id, id))objc_msgSend)(objc_getClass("SBApplicationSceneHandleRequest"), NSSelectorFromString(@"defaultRequestForApplication:sceneIdentity:displayIdentity:"), targetApp, sceneIdentity, objcInvoke(displaySceneManager, @"displayIdentity"));
 
 	id sceneHandle = objcInvoke_1id(displaySceneManager, @"fetchOrCreateApplicationSceneHandleForRequest:", sceneHandleRequest);
 	id appSceneEntity = objcInvoke_1id([objc_getClass("SBDeviceApplicationSceneEntity") alloc], @"initWithApplicationSceneHandle:", sceneHandle);
@@ -101,17 +103,17 @@ id carplayExternalDisplay = nil;
 	NSLog(@"fuck scene handle %@ %@", sceneHandle, appSceneEntity);
 
 	id appViewController = ((id (*)(id, SEL, NSString *, id))objc_msgSend)([objc_getClass("SBAppViewController") alloc], NSSelectorFromString(@"initWithIdentifier:andApplicationSceneEntity:"), identifier, appSceneEntity);
-	 objcInvoke_1int(appViewController, @"setIgnoresOcclusions:", 0);
+	objcInvoke_1int(appViewController, @"setIgnoresOcclusions:", 0);
 
 	id rootWindow = objcInvoke_1id([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
 
+	objcInvoke_1id(rootWindow, @"setRootViewController:", appViewController);
 	objcInvoke_1int(appViewController, @"_setCurrentMode:", 2);
-	objcInvoke_1id(rootWindow, @"addSubview:", objcInvoke(appViewController, @"view"));// objcInvoke(appViewController, @"appView"));
 
+	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.50 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+		objcInvoke(appViewController, @"resizeHostedAppForCarplayDisplay");
+	});
 
-	objcInvoke(appViewController, @"resizeHostedAppForCarplayDisplay");
-
-	objcInvoke_1id(rootWindow, @"setBackgroundColor:", [UIColor clearColor]);
 	objcInvoke_1int(rootWindow, @"setHidden:", 0);
 
 	currentlyHostedAppController = appViewController;
@@ -134,29 +136,57 @@ id carplayExternalDisplay = nil;
 
 	hostingWindow = nil;
 	currentlyHostedAppController = nil;
+	lastOrientation = -1;
 }
 
 %new
 - (void)resizeHostedAppForCarplayDisplay {
-	
-	NSLog(@"resizeHostedAppForCarplayDisplay fuck");
 
-	UIView *appSceneView = [[self valueForKey:@"_deviceAppViewController"] view];////objcInvoke(self, @"appView");// [self valueForKey:@"_appView";
-	//UIView *hostingContentView = [appSceneView valueForKey:@"_sceneContentContainerView"];
+	id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
+	int deviceOrientation = objcInvokeT(sharedApp, @"statusBarOrientation", int);
+	if (deviceOrientation == lastOrientation) {
+		return;
+	}
+	lastOrientation = deviceOrientation;
+
+	NSLog(@"resizeHostedAppForCarplayDisplay");
+
+	id appSceneView = [[self valueForKey:@"_deviceAppViewController"] valueForKey:@"_sceneView"];
+	UIView *hostingContentView = [appSceneView valueForKey:@"_sceneContentContainerView"];
 
 	CGRect displayFrame = ((CGRect (*)(id, SEL))objc_msgSend)(carplayExternalDisplay, NSSelectorFromString(@"frame"));
-	NSLog(@"fuck carplay frame: %@", NSStringFromCGRect(displayFrame));
+	NSLog(@"carplay frame: %@", NSStringFromCGRect(displayFrame));
 
 	CGSize carplayDisplaySize = displayFrame.size;
-
 	CGSize mainScreenSize = [[UIScreen mainScreen] bounds].size;
-	CGFloat widthScale = carplayDisplaySize.width / (mainScreenSize.width * 2);
-	CGFloat heightScale = carplayDisplaySize.height / (mainScreenSize.height * 2);
-	
-	NSLog(@"fuck  UIScreen size is %@, w scale: %f, %f", NSStringFromCGSize(mainScreenSize), widthScale, heightScale);
-	[[objcInvoke(self, @"appView") valueForKey:@"_sceneContentContainerView"] setTransform:CGAffineTransformMakeScale(widthScale, heightScale)];
 
-	//  [appSceneView setCenter:[[appSceneView superview] center]];
+	CGFloat widthScale;
+	CGFloat heightScale;
+	CGFloat xOrigin;
+
+	id rootWindow = [[self view] superview];
+
+	if (deviceOrientation == 1 || deviceOrientation == 2) {
+		// half width, full height
+		NSLog(@"portait");
+		widthScale = carplayDisplaySize.width / (mainScreenSize.width * 4);
+		heightScale = carplayDisplaySize.height / (mainScreenSize.height * 2);
+		xOrigin = (([rootWindow frame].size.width / 4) + [rootWindow frame].origin.x);
+	}
+	else {
+		NSLog(@"landscape");
+		// full width and height
+		widthScale = carplayDisplaySize.width / (mainScreenSize.width * 2);
+		heightScale = carplayDisplaySize.height / (mainScreenSize.height * 2);
+		xOrigin = [rootWindow frame].origin.x;
+	}
+
+	NSLog(@"UIScreen size is %@, w scale: %f, %f, origin: %f", NSStringFromCGSize(mainScreenSize), widthScale, heightScale, xOrigin);
+	[UIView animateWithDuration:0.2 animations:^(void) {
+		[hostingContentView setTransform:CGAffineTransformMakeScale(widthScale, heightScale)];
+		CGRect frame = [[self view] frame];
+		[[self view] setFrame:CGRectMake(xOrigin, frame.origin.y, frame.size.width, frame.size.height)];
+	} completion:nil];
 }
 
 %end
@@ -166,13 +196,18 @@ id carplayExternalDisplay = nil;
 
 - (BOOL)_shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
 {
+	BOOL shouldRotate = %orig;
 	if (currentlyHostedAppController && carplayExternalDisplay) {
-		NSLog(@"fuck new oriten %d", (int)interfaceOrientation);
-		objcInvoke(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay");
+
+		int deviceLocked = objcInvokeT(objcInvoke(objc_getClass("SpringBoard"), @"sharedApplication"), @"isLocked", int);
+		if (deviceLocked == 0 && shouldRotate) {
+			dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+				objcInvoke(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay");
+			});
+		}
 	}
 
-	return %orig;
-	
+	return shouldRotate;
 }
 
 %end

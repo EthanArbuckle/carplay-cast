@@ -1,1 +1,1 @@
-{ Filter = { Executables = ( "SpringBoard", "CarPlay" ); }; }
+{ Filter = { Executables = ( "SpringBoard" ); }; }
