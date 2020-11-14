@@ -63,8 +63,17 @@ id getCarplayCADisplay(void)
 }
 
 %new
+- (void)dismiss
+{
+    if (currentlyHostedAppController)
+    {
+        objcInvoke(currentlyHostedAppController, @"dismiss");
+    }
+}
+
+%new
 - (id)handleCarPlayLaunchNotification:(id)notification
-{   
+{
     NSString *identifier = [notification userInfo][@"identifier"];
     id targetApp = objcInvoke_1id(objcInvoke(objc_getClass("SBApplicationController"), @"sharedInstance"), @"applicationWithBundleIdentifier:", identifier);
     if (!targetApp)
@@ -99,6 +108,11 @@ id getCarplayCADisplay(void)
 
     objcInvoke_1id(rootWindow, @"setRootViewController:", currentlyHostedAppController);
     objcInvoke_1int(rootWindow, @"setHidden:", 0);
+
+     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:nil userInfo:@{@"orientation": @(3), @"target": identifier}];
+        NSLog(@"posted");
+    });
 
     objcInvoke(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay");
 
@@ -149,6 +163,7 @@ id getCarplayCADisplay(void)
 
     CGSize carplayDisplaySize = displayFrame.size;
     CGSize mainScreenSize = [[UIScreen mainScreen] bounds].size;
+    CGSize adjustedMainSize = CGSizeMake(MAX(mainScreenSize.width, mainScreenSize.height), MIN(mainScreenSize.width, mainScreenSize.height));
 
     CGFloat widthScale;
     CGFloat heightScale;
@@ -156,7 +171,7 @@ id getCarplayCADisplay(void)
 
     id rootWindow = [[self view] superview];
 
-    if (deviceOrientation == 1 || deviceOrientation == 2)
+    if (0)//(deviceOrientation == 1 || deviceOrientation == 2)
     {
         // half width, full height
         NSLog(@"portait");
@@ -168,17 +183,17 @@ id getCarplayCADisplay(void)
     {
         NSLog(@"landscape");
         // full width and height
-        widthScale = carplayDisplaySize.width / (mainScreenSize.width * 2);
-        heightScale = carplayDisplaySize.height / (mainScreenSize.height * 2);
+        widthScale = carplayDisplaySize.width / (adjustedMainSize.width * 2);
+        heightScale = carplayDisplaySize.height / (adjustedMainSize.height * 2);
         xOrigin = [rootWindow frame].origin.x;
     }
 
-    NSLog(@"UIScreen size is %@, w scale: %f, %f, origin: %f", NSStringFromCGSize(mainScreenSize), widthScale, heightScale, xOrigin);
+    NSLog(@"UIScreen size is %@, w scale: %f, %f, origin: %f", NSStringFromCGSize(adjustedMainSize), widthScale, heightScale, xOrigin);
     [UIView animateWithDuration:0.2 animations:^(void)
     {
         [hostingContentView setTransform:CGAffineTransformMakeScale(widthScale, heightScale)];
         CGRect frame = [[self view] frame];
-        [[self view] setFrame:CGRectMake(xOrigin, frame.origin.y, frame.size.width, frame.size.height)];
+        [[self view] setFrame:CGRectMake(xOrigin, frame.origin.y, carplayDisplaySize.width, carplayDisplaySize.height)];
     } completion:nil];
 }
 
@@ -195,9 +210,9 @@ id getCarplayCADisplay(void)
         int deviceLocked = objcInvokeT(objcInvoke(objc_getClass("SpringBoard"), @"sharedApplication"), @"isLocked", int);
         if (deviceLocked == 0 && shouldRotate)
         {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                objcInvoke(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay");
-            });
+            // dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            //     objcInvoke(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay");
+            // });
         }
     }
 
@@ -322,7 +337,7 @@ struct SBIconImageInfo {
     {
         id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
         id appHistory = objcInvoke(sharedApp, @"_currentAppHistory");
-        
+
         NSString *previousBundleID = nil;
         NSArray *orderedAppHistory = objcInvoke(appHistory, @"orderedAppHistory");
         if ([orderedAppHistory count] > 0)
@@ -350,6 +365,49 @@ struct SBIconImageInfo {
 %end
 
 
+%group APPS
+static int requestedOrientation = -1;
+
+%hook UIApplication
+
+- (id)init
+{
+    id _self = %orig;
+    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserver:_self selector:NSSelectorFromString(@"handleRotationRequest:") name:@"com.ethanarbuckle.carplayenable.orientation" object:nil];
+    return _self;
+}
+
+%new
+- (void)handleRotationRequest:(id)notification
+{
+    int orientation = [objcInvoke(notification, @"userInfo")[@"orientation"] intValue];
+    NSString *intendedBundleIdentifier = objcInvoke(notification, @"userInfo")[@"target"];
+
+    if ([[[NSBundle mainBundle] bundleIdentifier] isEqualToString:intendedBundleIdentifier])
+    {
+        requestedOrientation = orientation;
+        id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
+        UIWindow *keyWindow = objcInvoke(sharedApp, @"keyWindow");
+        ((void (*)(id, SEL, int, float, int))objc_msgSend)(keyWindow, NSSelectorFromString(@"_setRotatableViewOrientation:duration:force:"), orientation, 0.5, 1);
+    }
+}
+
+%end
+
+%hook UIWindow
+
+- (void)_setRotatableViewOrientation:(int)orientation duration:(float)duration force:(int)force
+{
+    if (requestedOrientation > 0 && orientation != requestedOrientation)
+    {
+        return;
+    }
+    %orig;
+}
+
+%end
+
+
 %ctor {
     if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"SpringBoard"])
     {
@@ -358,5 +416,9 @@ struct SBIconImageInfo {
     else if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"CarPlay"])
     {
         %init(CARPLAY);
+    }
+    else
+    {
+        %init(APPS);
     }
 }
