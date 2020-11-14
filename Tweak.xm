@@ -5,26 +5,6 @@
 #define objcInvoke_1id(a, b, c) ((id (*)(id, SEL, id))objc_msgSend)(a, NSSelectorFromString(b), c)
 #define objcInvoke_1int(a, b, c) ((id (*)(id, SEL, int))objc_msgSend)(a, NSSelectorFromString(b), c)
 #define objcInvoke_1T(a, b, c, t) ((id (*)(id, SEL, t))objc_msgSend)(a, NSSelectorFromString(b), c)
-// %hook FBSceneManager
-
-// - (id)_createSceneWithDefinition:(id)arg1 settings:(id)arg2 initialClientSettings:(id)arg3 transitionContext:(id)arg4 fromRemnant:(id)arg5 usingClientProvider:(id)arg6 completion:(void*)arg7
-//
-// 	NSLog(@"running,,, %@", arg1);
-// 	id specification = objcInvoke(arg1, @"specification");
-// 	Class settingsClass = objcInvokeT(specification, @"settingsClass", Class);
-// 	NSLog(@"default CLASS IS %@", NSStringFromClass(settingsClass));
-// 	objcInvoke_1id(arg1, @"setSpecification:", objcInvoke(NSClassFromString(@"UIApplicationSceneSpecification"), @"specification"));
-// 	NSLog(@"new CLASS IS %@", NSStringFromClass(objcInvokeT(objcInvoke(arg1, @"specification"), @"settingsClass", Class)));
-// 	NSLog(@"%@", arg1);
-// 	NSLog(@"%@", arg2);
-// 	NSLog(@"%@", arg3);
-// 	NSLog(@"%@", arg4);
-// 	NSLog(@"%@", arg5);
-// 	NSLog(@"%@", arg6);
-// 	return %orig;
-// }
-
-// %end
 
 %group SPRINGBOARD
 
@@ -65,29 +45,27 @@ int lastOrientation = -1;
 
 id getCarplayCADisplay(void)
 {
-    id display = nil;
-    for (id currentDisplay in objcInvoke(objc_getClass("CADisplay"), @"displays"))
+    id carplayAVDisplay = objcInvoke(objc_getClass("AVExternalDevice"), @"currentCarPlayExternalDevice");
+    if (!carplayAVDisplay)
     {
-        if (currentDisplay == objcInvoke(objc_getClass("CADisplay"), @"mainDisplay"))
-        {
-            continue;
-        }
+        return nil;
+    }
 
-        CGRect displayFrame = ((CGRect (*)(id, SEL))objc_msgSend)(currentDisplay, NSSelectorFromString(@"frame"));
-        if (CGRectEqualToRect(displayFrame, CGRectZero))
+    NSString *carplayDisplayUniqueID = objcInvoke(carplayAVDisplay, @"screenIDs")[0];
+    for (id display in objcInvoke(objc_getClass("CADisplay"), @"displays"))
+    {
+        if ([carplayDisplayUniqueID isEqualToString:objcInvoke(display, @"uniqueId")])
         {
-            continue;
+            return display;
         }
-
-        display = currentDisplay;
-        break;
     }
     return nil;
 }
 
 %new
-- (id)hostAppOnCarplayUnit:(NSString *)identifier
-{
+- (id)handleCarPlayLaunchNotification:(id)notification
+{   
+    NSString *identifier = [notification userInfo][@"identifier"];
     id targetApp = objcInvoke_1id(objcInvoke(objc_getClass("SBApplicationController"), @"sharedInstance"), @"applicationWithBundleIdentifier:", identifier);
     if (!targetApp)
     {
@@ -95,14 +73,10 @@ id getCarplayCADisplay(void)
         return nil;
     }
 
+    carplayExternalDisplay = getCarplayCADisplay();
     if (!carplayExternalDisplay)
     {
-        carplayExternalDisplay = getCarplayCADisplay();
-    }
-
-    if (!carplayExternalDisplay)
-    {
-        NSLog(@"cannot find the carplay cadisplay");
+        NSLog(@"cannot find a carplay display");
         return nil;
     }
 
@@ -122,12 +96,19 @@ id getCarplayCADisplay(void)
     objcInvoke_1int(currentlyHostedAppController, @"_setCurrentMode:", 2);
 
     id rootWindow = objcInvoke_1id([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
+
     objcInvoke_1id(rootWindow, @"setRootViewController:", currentlyHostedAppController);
     objcInvoke_1int(rootWindow, @"setHidden:", 0);
 
     objcInvoke(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay");
 
     return currentlyHostedAppController;
+}
+
+- (void)applicationDidFinishLaunching:(id)arg1
+{
+    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserver:self selector:NSSelectorFromString(@"handleCarPlayLaunchNotification:") name:@"com.ethanarbuckle.carplayenable" object:nil];
+    %orig;
 }
 
 %end
@@ -262,11 +243,12 @@ struct SBIconImageInfo {
 
 %hook CARApplication
 
-%new
-+ (id)_1newApplicationLibrary
++ (id)_newApplicationLibrary
 {
     id allAppsConfiguration = [[objc_getClass("FBSApplicationLibraryConfiguration") alloc] init];
     objcInvoke_1T(allAppsConfiguration, @"setApplicationInfoClass:", objc_getClass("CARApplicationInfo"), Class);
+    objcInvoke_1T(allAppsConfiguration, @"setApplicationPlaceholderClass:", objc_getClass("FBSApplicationPlaceholder"), Class);
+    objcInvoke_1T(allAppsConfiguration, @"setAllowConcurrentLoading:", 1, int);
     objcInvoke_1T(allAppsConfiguration, @"setInstalledApplicationFilter:", ^BOOL(id appProxy, NSSet *arg2) {
         NSArray *appTags = objcInvoke(appProxy, @"appTags");
         if ([appTags containsObject:@"hidden"])
@@ -279,24 +261,35 @@ struct SBIconImageInfo {
     id allAppsLibrary = objcInvoke_1id([objc_getClass("FBSApplicationLibrary") alloc], @"initWithConfiguration:", allAppsConfiguration);
     for (id appInfo in objcInvoke(allAppsLibrary, @"allInstalledApplications"))
     {
-        id appProxy = objcInvoke_1T(objc_getClass("LSApplicationProxy"), @"applicationProxyForIdentifier:", objcInvoke(appInfo, @"bundleIdentifier"), id);
-        id carplayDeclaration = objcInvoke_1T(objc_getClass("CRCarPlayAppDeclaration"), @"declarationForAppProxy:", appProxy, id);
-        if (!carplayDeclaration)
+        if (![appInfo valueForKey:@"_carPlayDeclaration"])
         {
-            continue;
-            NSLog(@"forcing");
+            id appProxy = objcInvoke_1T(objc_getClass("LSApplicationProxy"), @"applicationProxyForIdentifier:", objcInvoke(appInfo, @"bundleIdentifier"), id);
+            id carplayDeclaration = objcInvoke_1T(objc_getClass("CRCarPlayAppDeclaration"), @"declarationForAppProxy:", appProxy, id);
             carplayDeclaration = [[objc_getClass("CRCarPlayAppDeclaration") alloc] init];
-            objcInvoke_1T(carplayDeclaration, @"setSupportsTemplates:", 1, int);
+            objcInvoke_1T(carplayDeclaration, @"setSupportsTemplates:", 0, int);
             objcInvoke_1T(carplayDeclaration, @"setSupportsMaps:", 1, int);
             objcInvoke_1T(carplayDeclaration, @"setBundleIdentifier:", objcInvoke(appInfo, @"bundleIdentifier"), id);
             objcInvoke_1T(carplayDeclaration, @"setBundlePath:", objcInvoke(appInfo, @"bundleURL"), id);
+            [appInfo setValue:carplayDeclaration forKey:@"_carPlayDeclaration"];
+
+            NSArray *newTags = @[@"CarPlayEnable"];
+            if (objcInvoke(appInfo, @"tags"))
+            {
+                newTags = [newTags arrayByAddingObjectsFromArray:objcInvoke(appInfo, @"tags")];
+            }
+            [appInfo setValue:newTags forKey:@"_tags"];
         }
-        
-        ((void (*)(id, SEL, id, id))objc_msgSend)(allAppsLibrary, NSSelectorFromString(@"addApplicationProxy:withOverrideURL:"), appProxy, 0);
-        NSLog(@"%@", carplayDeclaration);
-        objcInvoke_1T(appInfo, @"_loadFromProxy:", appProxy, id);
-        NSLog(@"%@", appInfo);
-        //[appInfo setValue:carplayDeclaration forKey:@"_carPlayDeclaration"];
+    }
+
+    NSArray *systemIdentifiers = @[@"com.apple.CarPlayTemplateUIHost", @"com.apple.MusicUIService", @"com.apple.springboard", @"com.apple.InCallService", @"com.apple.CarPlaySettings", @"com.apple.CarPlayApp"];
+    for (NSString *systemIdent in systemIdentifiers)
+    {
+        id appProxy = objcInvoke_1T(objc_getClass("LSApplicationProxy"), @"applicationProxyForIdentifier:", systemIdent, id);
+        id appState = objcInvoke(appProxy, @"appState");
+        if (objcInvokeT(appState, @"isValid", int) == 1)
+        {
+            ((void (*)(id, SEL, id, id))objc_msgSend)(allAppsLibrary, NSSelectorFromString(@"addApplicationProxy:withOverrideURL:"), appProxy, 0);
+        }
     }
 
     return allAppsLibrary;
@@ -322,23 +315,47 @@ struct SBIconImageInfo {
 %end
 
 %hook CARApplicationLaunchInfo
-
-- (id)initWithApplication:(id)arg1 activationSettings:(id)arg2
++ (id)launchInfoForApplication:(id)arg1 withActivationSettings:(id)arg2
 {
     %log;
-    return %orig;
+    if ([objcInvoke(arg1, @"tags") containsObject:@"CarPlayEnable"])
+    {
+        id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
+        id appHistory = objcInvoke(sharedApp, @"_currentAppHistory");
+        
+        NSString *previousBundleID = nil;
+        NSArray *orderedAppHistory = objcInvoke(appHistory, @"orderedAppHistory");
+        if ([orderedAppHistory count] > 0)
+        {
+            previousBundleID = objcInvoke([orderedAppHistory firstObject], @"bundleIdentifier");
+        }
+
+        ((void (*)(id, SEL, id, id))objc_msgSend)(appHistory, NSSelectorFromString(@"_bundleIdentifierDidBecomeVisible:previousBundleIdentifier:"), objcInvoke(arg1, @"bundleIdentifier"), previousBundleID);
+
+        id dashboardRootController = objcInvoke(objcInvoke(sharedApp, @"_currentDashboard"), @"rootViewController");
+        id dockController = objcInvoke(dashboardRootController, @"appDockViewController");
+        objcInvoke(dockController, @"_refreshAppDock");
+
+        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable" object:nil userInfo:@{@"identifier": objcInvoke(arg1, @"bundleIdentifier")}];
+
+        return nil;
+    }
+    else
+    {
+        return %orig;
+    }
 }
-%end
 
 %end
+%end
+
 
 %ctor {
-
-    if ([[[NSProcessInfo processInfo] processName] containsString:@"SpringBoard"])
+    if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"SpringBoard"])
     {
         %init(SPRINGBOARD);
     }
-    else
+    else if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"CarPlay"])
     {
         %init(CARPLAY);
     }
