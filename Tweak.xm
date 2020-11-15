@@ -5,6 +5,7 @@
 #define objcInvoke_1id(a, b, c) ((id (*)(id, SEL, id))objc_msgSend)(a, NSSelectorFromString(b), c)
 #define objcInvoke_1int(a, b, c) ((id (*)(id, SEL, int))objc_msgSend)(a, NSSelectorFromString(b), c)
 #define objcInvoke_1T(a, b, c, t) ((id (*)(id, SEL, t))objc_msgSend)(a, NSSelectorFromString(b), c)
+#define getIvar(object, ivar) [object valueForKey:ivar]
 
 %group SPRINGBOARD
 
@@ -39,7 +40,7 @@
 id currentlyHostedAppController = nil;
 id carplayExternalDisplay = nil;
 int lastOrientation = -1;
-
+NSString *hostedApp = nil;
 
 %hook SpringBoard
 
@@ -72,6 +73,18 @@ id getCarplayCADisplay(void)
 }
 
 %new
+- (void)handleRotate:(id)button
+{
+    BOOL wasLandscape = lastOrientation >= 3;
+    int desiredOrientation = (wasLandscape) ? 1 : 3;
+
+    NSLog(@"carplay rotate to %d", desiredOrientation);
+
+    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:nil userInfo:@{@"orientation": @(desiredOrientation), @"target": hostedApp}];
+    objcInvoke_1T(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:", desiredOrientation, int);
+}
+
+%new
 - (id)handleCarPlayLaunchNotification:(id)notification
 {   
     NSString *identifier = [notification userInfo][@"identifier"];
@@ -89,6 +102,8 @@ id getCarplayCADisplay(void)
         return nil;
     }
 
+    hostedApp = identifier;
+
     id displayConfiguration = ((id (*)(id, SEL, id, int))objc_msgSend)([objc_getClass("FBSDisplayConfiguration") alloc], NSSelectorFromString(@"initWithCADisplay:isMainDisplay:"), carplayExternalDisplay, 0);
 
     id displaySceneManager = objcInvoke(objc_getClass("SBSceneManagerCoordinator"), @"mainDisplaySceneManager");
@@ -102,7 +117,26 @@ id getCarplayCADisplay(void)
 
     currentlyHostedAppController = ((id (*)(id, SEL, NSString *, id))objc_msgSend)([objc_getClass("SBAppViewController") alloc], NSSelectorFromString(@"initWithIdentifier:andApplicationSceneEntity:"), identifier, appSceneEntity);
     objcInvoke_1int(currentlyHostedAppController, @"setIgnoresOcclusions:", 0);
-    objcInvoke_1int(currentlyHostedAppController, @"_setCurrentMode:", 2);
+
+    [currentlyHostedAppController setValue:@(2) forKey:@"_currentMode"];
+    __block id sceneUpdateTransaction = ((id (*)(id, SEL, id, int))objc_msgSend)(currentlyHostedAppController, NSSelectorFromString(@"_createSceneUpdateTransactionForApplicationSceneEntity:deliveringActions:"), appSceneEntity, 1);
+    NSDictionary *p = @{@"orientation": @(3), @"target": hostedApp};
+
+    objcInvoke(getIvar(currentlyHostedAppController, @"_activationSettings"), @"clearActivationSettings");
+    objcInvoke_1T(sceneUpdateTransaction, @"setCompletionBlock:", ^void(int arg1) {
+        
+        objcInvoke_1T(getIvar(currentlyHostedAppController, @"_activeTransitions"), @"removeObject:", sceneUpdateTransaction, id);
+        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:nil userInfo:p];
+
+    }, void (^)(int));
+
+    objcInvoke_1T(getIvar(currentlyHostedAppController, @"_activeTransitions"), @"addObject:", sceneUpdateTransaction, id);
+    objcInvoke(sceneUpdateTransaction, @"begin");
+    objcInvoke(currentlyHostedAppController, @"_createSceneViewController");
+
+    id animationFactory = objcInvoke(objc_getClass("SBApplicationSceneView"), @"defaultDisplayModeAnimationFactory");
+    id appView = objcInvoke(currentlyHostedAppController, @"appView");
+    ((void (*)(id, SEL, int, id, void *))objc_msgSend)(appView, NSSelectorFromString(@"setDisplayMode:animationFactory:completion:"), 4, animationFactory, 0);
 
     UIWindow *rootWindow = objcInvoke_1id([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
     CGRect rootWindowFrame = [rootWindow frame];
@@ -116,22 +150,25 @@ id getCarplayCADisplay(void)
     [sidebarView setBackgroundColor:[UIColor lightGrayColor]];
     objcInvoke_1T(rootWindow, @"addSubview:", sidebarView, id);
 
-    UIButton *button = [UIButton buttonWithType:UIButtonTypeClose];
-    [button setImage:[UIImage systemImageNamed:@"xmark.circle" compatibleWithTraitCollection: [UITraitCollection traitCollectionWithUserInterfaceStyle:2]] forState:UIControlStateNormal];
+    id imageConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:40];
+
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+    [button setImage:[UIImage systemImageNamed:@"xmark.circle" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
     [button addTarget:self action:@selector(dismiss:) forControlEvents:UIControlEventTouchUpInside];
-    //[button setTitle:@"close" forState:UIControlStateNormal];
-    button.frame = CGRectMake(5, 20, 35.0, 35.0);
+    button.frame = CGRectMake(0, 10, 35.0, 35.0);
+    [button setTintColor:[UIColor blackColor]];
     [sidebarView addSubview:button];
 
-    //objcInvoke_1id(rootWindow, @"setRootViewController:", currentlyHostedAppController);
-    objcInvoke_1int(rootWindow, @"setHidden:", 0);
+    UIButton *rotateButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    [rotateButton setImage:[UIImage systemImageNamed:@"rotate.right" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
+    [rotateButton addTarget:self action:@selector(handleRotate:) forControlEvents:UIControlEventTouchUpInside];
+    rotateButton.frame = CGRectMake(0, rootWindowFrame.size.height - 45, 35.0, 35.0);
+    [rotateButton setTintColor:[UIColor blackColor]];
+    [sidebarView addSubview:rotateButton];
 
-     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:nil userInfo:@{@"orientation": @(3), @"target": identifier}];
-        NSLog(@"posted");
-    });
+    objcInvoke_1int(rootWindow, @"setHidden:", 0);
     
-    objcInvoke(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay");
+    objcInvoke_1T(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:", 3, int);
 
     return currentlyHostedAppController;
 }
@@ -162,18 +199,22 @@ id getCarplayCADisplay(void)
 
     // todo: resign first responder (kb causes glitches on return)
     // send app to background if its not on the main screen
+
+    id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
+    int deviceOrientation = objcInvokeT(sharedApp, @"statusBarOrientation", int);
+
+    NSString *hostedIdentifier = getIvar(self, @"_identifier");
+    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:nil userInfo:@{@"orientation": @(deviceOrientation), @"target": hostedIdentifier}];
 }
 
 %new
-- (void)resizeHostedAppForCarplayDisplay
+- (void)resizeHostedAppForCarplayDisplay:(int)desiredOrientation
 {
-    id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
-    int deviceOrientation = objcInvokeT(sharedApp, @"statusBarOrientation", int);
-    if (deviceOrientation == lastOrientation)
+    if (desiredOrientation == lastOrientation)
     {
         return;
     }
-    lastOrientation = deviceOrientation;
+    lastOrientation = desiredOrientation;
 
     id appSceneView = [[self valueForKey:@"_deviceAppViewController"] valueForKey:@"_sceneView"];
     UIView *hostingContentView = [appSceneView valueForKey:@"_sceneContentContainerView"];
@@ -191,7 +232,7 @@ id getCarplayCADisplay(void)
 
     id rootWindow = [[[self view] superview] superview];
 
-    if (0)//(deviceOrientation == 1 || deviceOrientation == 2)
+    if (desiredOrientation == 1 || desiredOrientation == 2)
     {
         // half width, full height
         NSLog(@"portait");
@@ -218,29 +259,6 @@ id getCarplayCADisplay(void)
 }
 
 %end
-
-
-%hook UIWindow
-
-- (BOOL)_shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
-{
-    BOOL shouldRotate = %orig;
-    if (currentlyHostedAppController && carplayExternalDisplay)
-    {
-        int deviceLocked = objcInvokeT(objcInvoke(objc_getClass("SpringBoard"), @"sharedApplication"), @"isLocked", int);
-        if (deviceLocked == 0 && shouldRotate)
-        {
-            // dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            //     objcInvoke(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay");
-            // });
-        }
-    }
-
-    return shouldRotate;
-}
-
-%end
-
 
 %hook FBScene
 
@@ -426,7 +444,7 @@ static int requestedOrientation = -1;
         requestedOrientation = orientation;
         id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
         UIWindow *keyWindow = objcInvoke(sharedApp, @"keyWindow");
-        ((void (*)(id, SEL, int, float, int))objc_msgSend)(keyWindow, NSSelectorFromString(@"_setRotatableViewOrientation:duration:force:"), orientation, 0.5, 1);
+        ((void (*)(id, SEL, int, float, int))objc_msgSend)(keyWindow, NSSelectorFromString(@"_setRotatableViewOrientation:duration:force:"), orientation, 0, 1);
     }
 }
 
@@ -438,6 +456,7 @@ static int requestedOrientation = -1;
 {
     if (requestedOrientation > 0 && orientation != requestedOrientation)
     {
+        //todo: release when not on carplay display
         return;
     }
     %orig;
