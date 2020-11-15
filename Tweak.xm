@@ -63,7 +63,7 @@ id getCarplayCADisplay(void)
 }
 
 %new
-- (void)dismiss
+- (void)dismiss:(id)button
 {
     if (currentlyHostedAppController)
     {
@@ -73,7 +73,7 @@ id getCarplayCADisplay(void)
 
 %new
 - (id)handleCarPlayLaunchNotification:(id)notification
-{
+{   
     NSString *identifier = [notification userInfo][@"identifier"];
     id targetApp = objcInvoke_1id(objcInvoke(objc_getClass("SBApplicationController"), @"sharedInstance"), @"applicationWithBundleIdentifier:", identifier);
     if (!targetApp)
@@ -104,16 +104,33 @@ id getCarplayCADisplay(void)
     objcInvoke_1int(currentlyHostedAppController, @"setIgnoresOcclusions:", 0);
     objcInvoke_1int(currentlyHostedAppController, @"_setCurrentMode:", 2);
 
-    id rootWindow = objcInvoke_1id([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
+    UIWindow *rootWindow = objcInvoke_1id([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
+    CGRect rootWindowFrame = [rootWindow frame];
 
-    objcInvoke_1id(rootWindow, @"setRootViewController:", currentlyHostedAppController);
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(40, rootWindowFrame.origin.y, rootWindowFrame.size.width - 40, rootWindowFrame.size.height)];
+    [container setBackgroundColor:[UIColor clearColor]];
+    [container addSubview:objcInvoke(currentlyHostedAppController, @"view")];
+    objcInvoke_1T(rootWindow, @"addSubview:", container, id);
+
+    UIView *sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, rootWindowFrame.origin.y, 40, rootWindowFrame.size.height)];
+    [sidebarView setBackgroundColor:[UIColor lightGrayColor]];
+    objcInvoke_1T(rootWindow, @"addSubview:", sidebarView, id);
+
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeClose];
+    [button setImage:[UIImage systemImageNamed:@"xmark.circle" compatibleWithTraitCollection: [UITraitCollection traitCollectionWithUserInterfaceStyle:2]] forState:UIControlStateNormal];
+    [button addTarget:self action:@selector(dismiss:) forControlEvents:UIControlEventTouchUpInside];
+    //[button setTitle:@"close" forState:UIControlStateNormal];
+    button.frame = CGRectMake(5, 20, 35.0, 35.0);
+    [sidebarView addSubview:button];
+
+    //objcInvoke_1id(rootWindow, @"setRootViewController:", currentlyHostedAppController);
     objcInvoke_1int(rootWindow, @"setHidden:", 0);
 
      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
         [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:nil userInfo:@{@"orientation": @(3), @"target": identifier}];
         NSLog(@"posted");
     });
-
+    
     objcInvoke(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay");
 
     return currentlyHostedAppController;
@@ -135,13 +152,16 @@ id getCarplayCADisplay(void)
 {
     objcInvoke_1int(self, @"_setCurrentMode:", 0);
 
-    id rootWindow = [[self view] superview];
+    id rootWindow = [[[self view] superview] superview];
     [[self view] removeFromSuperview];
     objcInvoke_1int(rootWindow, @"setHidden:", 1);
 
     rootWindow = nil;
     currentlyHostedAppController = nil;
     lastOrientation = -1;
+
+    // todo: resign first responder (kb causes glitches on return)
+    // send app to background if its not on the main screen
 }
 
 %new
@@ -161,7 +181,7 @@ id getCarplayCADisplay(void)
     CGRect displayFrame = ((CGRect (*)(id, SEL))objc_msgSend)(carplayExternalDisplay, NSSelectorFromString(@"frame"));
     NSLog(@"carplay frame: %@", NSStringFromCGRect(displayFrame));
 
-    CGSize carplayDisplaySize = displayFrame.size;
+    CGSize carplayDisplaySize = CGSizeMake(displayFrame.size.width - 80, displayFrame.size.height);
     CGSize mainScreenSize = [[UIScreen mainScreen] bounds].size;
     CGSize adjustedMainSize = CGSizeMake(MAX(mainScreenSize.width, mainScreenSize.height), MIN(mainScreenSize.width, mainScreenSize.height));
 
@@ -169,7 +189,7 @@ id getCarplayCADisplay(void)
     CGFloat heightScale;
     CGFloat xOrigin;
 
-    id rootWindow = [[self view] superview];
+    id rootWindow = [[[self view] superview] superview];
 
     if (0)//(deviceOrientation == 1 || deviceOrientation == 2)
     {
@@ -243,7 +263,6 @@ id getCarplayCADisplay(void)
 }
 
 %end
-
 
 %end
 
@@ -337,7 +356,7 @@ struct SBIconImageInfo {
     {
         id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
         id appHistory = objcInvoke(sharedApp, @"_currentAppHistory");
-
+        
         NSString *previousBundleID = nil;
         NSArray *orderedAppHistory = objcInvoke(appHistory, @"orderedAppHistory");
         if ([orderedAppHistory count] > 0)
@@ -362,6 +381,25 @@ struct SBIconImageInfo {
 }
 
 %end
+
+%hook CARAppDockViewController
+
+- (void)_dockButtonPressed:(id)arg1
+{
+    %orig;
+
+    NSString *bundleID = objcInvoke(arg1, @"bundleIdentifier");
+    id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
+    id appLibrary = objcInvoke(sharedApp, @"sharedApplicationLibrary");
+    id selectedAppInfo = objcInvoke_1T(appLibrary, @"applicationInfoForBundleIdentifier:", bundleID, id);
+    if ([objcInvoke(selectedAppInfo, @"tags") containsObject:@"CarPlayEnable"])
+    {
+        objcInvoke_1T(self, @"setDockEnabled:", 1, int);
+    }
+}
+
+%end
+
 %end
 
 
@@ -404,6 +442,8 @@ static int requestedOrientation = -1;
     }
     %orig;
 }
+
+%end
 
 %end
 
