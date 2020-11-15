@@ -7,38 +7,27 @@
 
 %group SPRINGBOARD
 
-%hook SBAppViewController
-
--(int)sceneHandle:(id)arg2 didUpdateSettingsWithDiff:(id)arg3 previousSettings:(id)arg4
-{
-    id scene = objcInvoke(arg2, @"scene");
-    id settings = objcInvoke(scene, @"settings");
-    BOOL isForeground = ((BOOL (*)(id, SEL))objc_msgSend)(settings, NSSelectorFromString(@"isForeground"));
-    if (isForeground == NO)
-    {
-        return 1;
-    }
-    return %orig;
-}
-
-%end
-
-
-%hook SBSuspendedUnderLockManager
-
--(int)_shouldBeBackgroundUnderLockForScene:(id)arg2 withSettings:(id)arg3
-{
-    NSLog(@"forcing allow background %@ %@", arg2, arg3);
-    return 0;
-}
-
-%end
-
-
 id currentlyHostedAppController = nil;
 id carplayExternalDisplay = nil;
 int lastOrientation = -1;
 NSString *hostedApp = nil;
+NSMutableArray *appIdentifiersToIgnoreLockAssertions = nil;
+
+%hook SBSuspendedUnderLockManager
+
+- (int)_shouldBeBackgroundUnderLockForScene:(id)arg2 withSettings:(id)arg3
+{
+    BOOL shouldBackground  = %orig;
+    NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(arg2, @"client"), @"process"), @"bundleIdentifier");
+    if ([appIdentifiersToIgnoreLockAssertions containsObject:sceneAppBundleID] && shouldBackground)
+    {
+        shouldBackground = NO;
+    }
+    NSLog(@"forcing allow background %d %@ %@", shouldBackground, arg2, arg3);
+    return shouldBackground;
+}
+
+%end
 
 %hook SpringBoard
 
@@ -76,8 +65,6 @@ id getCarplayCADisplay(void)
     BOOL wasLandscape = lastOrientation >= 3;
     int desiredOrientation = (wasLandscape) ? 1 : 3;
 
-    NSLog(@"carplay rotate to %d", desiredOrientation);
-
     [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:hostedApp userInfo:@{@"orientation": @(desiredOrientation)}];
     objcInvoke_1T(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:", desiredOrientation, int);
 }
@@ -101,6 +88,7 @@ id getCarplayCADisplay(void)
     }
 
     hostedApp = identifier;
+    [appIdentifiersToIgnoreLockAssertions addObject:hostedApp];
 
     id displayConfiguration = ((id (*)(id, SEL, id, int))objc_msgSend)([objc_getClass("FBSDisplayConfiguration") alloc], NSSelectorFromString(@"initWithCADisplay:isMainDisplay:"), carplayExternalDisplay, 0);
 
@@ -127,10 +115,10 @@ id getCarplayCADisplay(void)
         id processLaunchTransaction = getIvar(sceneUpdateTransaction, @"_processLaunchTransaction");
         id appProcess = objcInvoke(processLaunchTransaction, @"process");
         objcInvoke_1T(appProcess, @"_executeBlockAfterLaunchCompletes:", ^void(void) {
-            NSLog(@"sending rotate request");
+            // Ask the app to rotate to landscape
             [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:identifier userInfo:@{@"orientation": @(3)}];
-        }, void (^)(void));
 
+        }, void (^)(void));
     }, void (^)(int));
 
     objcInvoke_1T(getIvar(currentlyHostedAppController, @"_activeTransitions"), @"addObject:", sceneUpdateTransaction, id);
@@ -147,11 +135,11 @@ id getCarplayCADisplay(void)
     UIView *container = [[UIView alloc] initWithFrame:CGRectMake(40, rootWindowFrame.origin.y, rootWindowFrame.size.width - 40, rootWindowFrame.size.height)];
     [container setBackgroundColor:[UIColor clearColor]];
     [container addSubview:objcInvoke(currentlyHostedAppController, @"view")];
-    objcInvoke_1T(rootWindow, @"addSubview:", container, id);
+    [rootWindow addSubview:container];
 
     UIView *sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, rootWindowFrame.origin.y, 40, rootWindowFrame.size.height)];
     [sidebarView setBackgroundColor:[UIColor lightGrayColor]];
-    objcInvoke_1T(rootWindow, @"addSubview:", sidebarView, id);
+    [rootWindow addSubview:sidebarView];
 
     id imageConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:40];
 
@@ -171,7 +159,7 @@ id getCarplayCADisplay(void)
 
     objcInvoke_1T(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:", 3, int);
     [rootWindow setAlpha:0];
-    objcInvoke_1T(rootWindow, @"setHidden:", 0, int);
+    [rootWindow setHidden:0];
 
     [UIView animateWithDuration:1.0 animations:^(void)
     {
@@ -182,6 +170,8 @@ id getCarplayCADisplay(void)
 - (void)applicationDidFinishLaunching:(id)arg1
 {
     [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserver:self selector:NSSelectorFromString(@"handleCarPlayLaunchNotification:") name:@"com.ethanarbuckle.carplayenable" object:nil];
+    appIdentifiersToIgnoreLockAssertions = [[NSMutableArray alloc] init];
+
     %orig;
 }
 
@@ -204,12 +194,30 @@ id getCarplayCADisplay(void)
         objcInvoke_1T(self, @"_setCurrentMode:", 0, int);
         [[self view] removeFromSuperview];
 
+        // After the scene returns to the device, release the assertion that prevents suspension
+        id appScene = objcInvoke(objcInvoke(currentlyHostedAppController, @"sceneHandle"), @"sceneIfExists");
+        NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
+        [appIdentifiersToIgnoreLockAssertions removeObject:sceneAppBundleID];
+
+        // Send the app to the background *if it is not on the main screen*
+        id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
+        id frontmostApp = objcInvoke(sharedApp, @"_accessibilityFrontMostApplication");
+        BOOL isAppOnMainScreen = frontmostApp && [objcInvoke(frontmostApp, @"bundleIdentifier") isEqualToString:sceneAppBundleID];
+        if (!isAppOnMainScreen)
+        {
+            NSLog(@"app not foreground, sending to back");
+            id sceneSettings = objcInvoke(appScene, @"mutableSettings");
+            objcInvoke_1T(sceneSettings, @"setBackgrounded:", 1, int);
+            objcInvoke_1T(sceneSettings, @"setForeground:", 0, int);
+            ((void (*)(id, SEL, id, id, void *))objc_msgSend)(appScene, NSSelectorFromString(@"updateSettings:withTransitionContext:completion:"), sceneSettings, nil, 0);
+        }
+
+
         rootWindow = nil;
         currentlyHostedAppController = nil;
 
         lastOrientation = resetOrientationLock;
         // todo: resign first responder (kb causes glitches on return)
-        // send app to background if its not on the main screen
     };
 
     [UIView animateWithDuration:0.2 animations:^(void)
@@ -261,7 +269,6 @@ id getCarplayCADisplay(void)
         xOrigin = [rootWindow frame].origin.x;
     }
 
-    NSLog(@"UIScreen size is %@, carplay screen: %@, w scale: %f, %f, origin: %f --- %d", NSStringFromCGSize(mainScreenSize), NSStringFromCGSize(carplayDisplaySize), widthScale, heightScale, xOrigin, desiredOrientation);
     [hostingContentView setTransform:CGAffineTransformMakeScale(widthScale, heightScale)];
     CGRect frame = [[self view] frame];
     [[self view] setFrame:CGRectMake(xOrigin, frame.origin.y, carplayDisplaySize.width, carplayDisplaySize.height)];
@@ -274,12 +281,11 @@ id getCarplayCADisplay(void)
 
 - (void)_updateReferenceSize:(struct CGSize)arg1 andOrientation:(long long)arg2
 {
-    // Scene views do not support Face-Up/Face-Down orientations - it will raise an exception if attempted
+    // Scene views do not support Face-Up/Face-Down orientations - it will raise an exception if attempted.
     // If the device is in a restricted orientation, override to landscape (3). This doesn't really matter because
-    // the app's content will be unconditionally forced to landscape when it becomes live
+    // the app's content will be unconditionally forced to landscape when it becomes live.
     if (arg2 > 4)
     {
-        NSLog(@"avoiding crashing...");
         return %orig(arg1, 3);
     }
     %orig;
@@ -291,19 +297,23 @@ id getCarplayCADisplay(void)
 
 - (void)updateSettings:(id)arg1 withTransitionContext:(id)arg2 completion:(void *)arg3
 {
-    if (currentlyHostedAppController != nil)
-    {
-        id sceneHandle = objcInvoke(currentlyHostedAppController, @"sceneHandle");
-        id carplayHostedScene = objcInvoke(sceneHandle, @"scene");
-        if (carplayHostedScene && [carplayHostedScene isEqual:self])
+    id sceneClient = objcInvoke(self, @"client");
+    if ([sceneClient respondsToSelector:NSSelectorFromString(@"process")]) {
+        NSString *sceneAppBundleID = objcInvoke(objcInvoke(sceneClient, @"process"), @"bundleIdentifier");
+        if ([appIdentifiersToIgnoreLockAssertions containsObject:sceneAppBundleID])
         {
             if (((BOOL (*)(id, SEL))objc_msgSend)(arg1, NSSelectorFromString(@"isForeground")) == NO)
             {
+                NSLog(@"not allowing scene to background: %@", sceneAppBundleID);
                 return;
             }
         }
     }
 
+    if (((BOOL (*)(id, SEL))objc_msgSend)(arg1, NSSelectorFromString(@"isForeground")) == NO) {
+        NSLog(@"scene went to background %@", self);
+    }
+    
     %orig;
 }
 
@@ -346,9 +356,8 @@ struct SBIconImageInfo {
             {
                 continue;
             }
-            id appProxy = objcInvoke_1T(objc_getClass("LSApplicationProxy"), @"applicationProxyForIdentifier:", objcInvoke(appInfo, @"bundleIdentifier"), id);
-            id carplayDeclaration = objcInvoke_1T(objc_getClass("CRCarPlayAppDeclaration"), @"declarationForAppProxy:", appProxy, id);
-            carplayDeclaration = [[objc_getClass("CRCarPlayAppDeclaration") alloc] init];
+
+            id carplayDeclaration = [[objc_getClass("CRCarPlayAppDeclaration") alloc] init];
             objcInvoke_1T(carplayDeclaration, @"setSupportsTemplates:", 0, int);
             objcInvoke_1T(carplayDeclaration, @"setSupportsMaps:", 1, int);
             objcInvoke_1T(carplayDeclaration, @"setBundleIdentifier:", objcInvoke(appInfo, @"bundleIdentifier"), id);
@@ -460,7 +469,6 @@ static int orientationOverride = -1;
 - (id)init
 {
     id _self = %orig;
-    NSLog(@"app launched");
     [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserver:_self selector:NSSelectorFromString(@"handleRotationRequest:") name:@"com.ethanarbuckle.carplayenable.orientation" object:[[NSBundle mainBundle] bundleIdentifier]];
     return _self;
 }
@@ -469,7 +477,6 @@ static int orientationOverride = -1;
 - (void)handleRotationRequest:(id)notification
 {
     orientationOverride = [objcInvoke(notification, @"userInfo")[@"orientation"] intValue];
-    NSLog(@"app got rotate request. requestedOrientation: %d", orientationOverride);
 
     int orientationToRequest = orientationOverride;
     if (orientationToRequest == -1)
@@ -492,7 +499,6 @@ static int orientationOverride = -1;
 
 - (void)_setRotatableViewOrientation:(int)orientation duration:(float)duration force:(int)force
 {
-    NSLog(@"_setRotatableViewOrientation(%d) (override is %d)", orientation, orientationOverride);
     if (orientationOverride > 0)
     {
         return %orig(orientationOverride, duration, force);
