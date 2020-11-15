@@ -84,7 +84,7 @@ id getCarplayCADisplay(void)
 
 %new
 - (void)handleCarPlayLaunchNotification:(id)notification
-{   
+{
     NSString *identifier = [notification userInfo][@"identifier"];
     id targetApp = objcInvoke_1T(objcInvoke(objc_getClass("SBApplicationController"), @"sharedInstance"), @"applicationWithBundleIdentifier:", identifier, id);
     if (!targetApp)
@@ -121,7 +121,7 @@ id getCarplayCADisplay(void)
 
     objcInvoke(getIvar(currentlyHostedAppController, @"_activationSettings"), @"clearActivationSettings");
     objcInvoke_1T(sceneUpdateTransaction, @"setCompletionBlock:", ^void(int arg1) {
-        
+
         objcInvoke_1T(getIvar(currentlyHostedAppController, @"_activeTransitions"), @"removeObject:", sceneUpdateTransaction, id);
 
         id processLaunchTransaction = getIvar(sceneUpdateTransaction, @"_processLaunchTransaction");
@@ -168,11 +168,11 @@ id getCarplayCADisplay(void)
     [rotateButton setFrame:CGRectMake(0, rootWindowFrame.size.height - 45, 35.0, 35.0)];
     [rotateButton setTintColor:[UIColor blackColor]];
     [sidebarView addSubview:rotateButton];
-    
+
     objcInvoke_1T(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:", 3, int);
     [rootWindow setAlpha:0];
     objcInvoke_1T(rootWindow, @"setHidden:", 0, int);
-    
+
     [UIView animateWithDuration:1.0 animations:^(void)
     {
         [rootWindow setAlpha:1];
@@ -265,7 +265,24 @@ id getCarplayCADisplay(void)
     [hostingContentView setTransform:CGAffineTransformMakeScale(widthScale, heightScale)];
     CGRect frame = [[self view] frame];
     [[self view] setFrame:CGRectMake(xOrigin, frame.origin.y, carplayDisplaySize.width, carplayDisplaySize.height)];
-    
+
+}
+
+%end
+
+%hook SBSceneView
+
+- (void)_updateReferenceSize:(struct CGSize)arg1 andOrientation:(long long)arg2
+{
+    // Scene views do not support Face-Up/Face-Down orientations - it will raise an exception if attempted
+    // If the device is in a restricted orientation, override to landscape (3). This doesn't really matter because
+    // the app's content will be unconditionally forced to landscape when it becomes live
+    if (arg2 > 4)
+    {
+        NSLog(@"avoiding crashing...");
+        return %orig(arg1, 3);
+    }
+    %orig;
 }
 
 %end
@@ -381,13 +398,14 @@ struct SBIconImageInfo {
 %end
 
 %hook CARApplicationLaunchInfo
+
 + (id)launchInfoForApplication:(id)arg1 withActivationSettings:(id)arg2
 {
     if ([objcInvoke(arg1, @"tags") containsObject:@"CarPlayEnable"])
     {
         id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
         id appHistory = objcInvoke(sharedApp, @"_currentAppHistory");
-        
+
         NSString *previousBundleID = nil;
         NSArray *orderedAppHistory = objcInvoke(appHistory, @"orderedAppHistory");
         if ([orderedAppHistory count] > 0)
