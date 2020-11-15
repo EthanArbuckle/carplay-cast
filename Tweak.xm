@@ -237,7 +237,6 @@ id getCarplayCADisplay(void)
 
     CGSize carplayDisplaySize = CGSizeMake(displayFrame.size.width - 80, displayFrame.size.height);
     CGSize mainScreenSize = [[UIScreen mainScreen] bounds].size;
-    CGSize adjustedMainSize = CGSizeMake(MAX(mainScreenSize.width, mainScreenSize.height), MIN(mainScreenSize.width, mainScreenSize.height));
 
     CGFloat widthScale;
     CGFloat heightScale;
@@ -248,19 +247,21 @@ id getCarplayCADisplay(void)
     if (desiredOrientation == 1 || desiredOrientation == 2)
     {
         // half width, full height
-        widthScale = carplayDisplaySize.width / (mainScreenSize.width * 4);
-        heightScale = carplayDisplaySize.height / (mainScreenSize.height * 2);
-        xOrigin = (([rootWindow frame].size.width / 4) + [rootWindow frame].origin.x);
+        CGSize adjustedMainSize = CGSizeMake(MIN(mainScreenSize.width, mainScreenSize.height), MAX(mainScreenSize.width, mainScreenSize.height));
+        widthScale = (carplayDisplaySize.width / 1.5) / (adjustedMainSize.width * 2);
+        heightScale = carplayDisplaySize.height / (adjustedMainSize.height * 2);
+        xOrigin = (([rootWindow frame].size.width * widthScale) / 4) + [rootWindow frame].origin.x;
     }
     else
     {
         // full width and height
+        CGSize adjustedMainSize = CGSizeMake(MAX(mainScreenSize.width, mainScreenSize.height), MIN(mainScreenSize.width, mainScreenSize.height));
         widthScale = carplayDisplaySize.width / (adjustedMainSize.width * 2);
         heightScale = carplayDisplaySize.height / (adjustedMainSize.height * 2);
         xOrigin = [rootWindow frame].origin.x;
     }
 
-    NSLog(@"UIScreen size is %@, w scale: %f, %f, origin: %f", NSStringFromCGSize(adjustedMainSize), widthScale, heightScale, xOrigin);
+    NSLog(@"UIScreen size is %@, carplay screen: %@, w scale: %f, %f, origin: %f --- %d", NSStringFromCGSize(mainScreenSize), NSStringFromCGSize(carplayDisplaySize), widthScale, heightScale, xOrigin, desiredOrientation);
     [hostingContentView setTransform:CGAffineTransformMakeScale(widthScale, heightScale)];
     CGRect frame = [[self view] frame];
     [[self view] setFrame:CGRectMake(xOrigin, frame.origin.y, carplayDisplaySize.width, carplayDisplaySize.height)];

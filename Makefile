@@ -1,6 +1,8 @@
 export THEOS_DEVICE_IP=192.168.86.9
 
 ARCHS = arm64
+TARGET=iphone:clang:13.5:14.0
+
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = carplayenable
