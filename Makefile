@@ -1,4 +1,4 @@
-export THEOS_DEVICE_IP=192.168.86.10
+export THEOS_DEVICE_IP=192.168.86.9
 
 ARCHS = arm64
 include $(THEOS)/makefiles/common.mk
