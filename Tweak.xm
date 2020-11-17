@@ -367,15 +367,23 @@ Use this to prevent the App from going to sleep when other application's are lau
 %end
 
 
+/*
+Called when the device's main screen is turning on or off
+*/
 int hook_BKSDisplayServicesSetScreenBlanked(int arg1)
 {
     if (arg1 == 1 && currentlyHostedAppController != nil)
     {
+        // The device's screen is turning off while an app is hosted on the carplay display
         id appScene = objcInvoke(objcInvoke(currentlyHostedAppController, @"sceneHandle"), @"sceneIfExists");
         NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
         if ([appIdentifiersToIgnoreLockAssertions containsObject:sceneAppBundleID])
         {
+            // Turn the screen off as originally intended
             orig_BKSDisplayServicesSetScreenBlanked(1);
+
+            // Wait for the events to propagate through the system, then undo it (doing this too early doesn't work).
+            // This does not actually turn the display on
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                 orig_BKSDisplayServicesSetScreenBlanked(0);
             });
@@ -401,26 +409,9 @@ struct SBIconImageInfo {
 
 %hook CARApplication
 
-/*
-Include all User applications on the CarPlay dashboard
-*/
-+ (id)_newApplicationLibrary
+void addCarplayDeclarationsToAppLibrary(id appLibrary)
 {
-    id allAppsConfiguration = [[objc_getClass("FBSApplicationLibraryConfiguration") alloc] init];
-    objcInvoke_1(allAppsConfiguration, @"setApplicationInfoClass:", objc_getClass("CARApplicationInfo"));
-    objcInvoke_1(allAppsConfiguration, @"setApplicationPlaceholderClass:", objc_getClass("FBSApplicationPlaceholder"));
-    objcInvoke_1(allAppsConfiguration, @"setAllowConcurrentLoading:", 1);
-    objcInvoke_1(allAppsConfiguration, @"setInstalledApplicationFilter:", ^BOOL(id appProxy, NSSet *arg2) {
-        NSArray *appTags = objcInvoke(appProxy, @"appTags");
-        if ([appTags containsObject:@"hidden"])
-        {
-            return 0;
-        }
-        return 1;
-    });
-
-    id allAppsLibrary = objcInvoke_1([objc_getClass("FBSApplicationLibrary") alloc], @"initWithConfiguration:", allAppsConfiguration);
-    for (id appInfo in objcInvoke(allAppsLibrary, @"allInstalledApplications"))
+    for (id appInfo in objcInvoke(appLibrary, @"allInstalledApplications"))
     {
         if (getIvar(appInfo, @"_carPlayDeclaration") == nil)
         {
@@ -444,6 +435,29 @@ Include all User applications on the CarPlay dashboard
             setIvar(appInfo, @"_tags", newTags);
         }
     }
+}
+
+/*
+Include all User applications on the CarPlay dashboard
+*/
++ (id)_newApplicationLibrary
+{
+    id allAppsConfiguration = [[objc_getClass("FBSApplicationLibraryConfiguration") alloc] init];
+    objcInvoke_1(allAppsConfiguration, @"setApplicationInfoClass:", objc_getClass("CARApplicationInfo"));
+    objcInvoke_1(allAppsConfiguration, @"setApplicationPlaceholderClass:", objc_getClass("FBSApplicationPlaceholder"));
+    objcInvoke_1(allAppsConfiguration, @"setAllowConcurrentLoading:", 1);
+    objcInvoke_1(allAppsConfiguration, @"setInstalledApplicationFilter:", ^BOOL(id appProxy, NSSet *arg2) {
+        NSArray *appTags = objcInvoke(appProxy, @"appTags");
+        if ([appTags containsObject:@"hidden"])
+        {
+            return 0;
+        }
+        return 1;
+    });
+
+    id allAppsLibrary = objcInvoke_1([objc_getClass("FBSApplicationLibrary") alloc], @"initWithConfiguration:", allAppsConfiguration);
+    // Add a "carplay declaration" to each app so they appear on the dashboard
+    addCarplayDeclarationsToAppLibrary(allAppsLibrary);
 
     NSArray *systemIdentifiers = @[@"com.apple.CarPlayTemplateUIHost", @"com.apple.MusicUIService", @"com.apple.springboard", @"com.apple.InCallService", @"com.apple.CarPlaySettings", @"com.apple.CarPlayApp"];
     for (NSString *systemIdent in systemIdentifiers)
@@ -541,6 +555,22 @@ When an app is launched via the Carplay Dock
     {
         objcInvoke_1(self, @"setDockEnabled:", 1);
     }
+}
+
+%end
+
+
+/*
+Called when an app is installed or uninstalled.
+Used for adding "carplay declaration" to newly installed apps so they appear on the dashboard
+*/
+%hook _CARDashboardHomeViewController
+
+- (void)_handleAppLibraryRefresh
+{
+    id appLibrary = objcInvoke(self, @"library");
+    addCarplayDeclarationsToAppLibrary(appLibrary);
+    %orig;
 }
 
 %end
