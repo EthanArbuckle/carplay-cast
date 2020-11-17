@@ -1,5 +1,6 @@
 #include <Foundation/Foundation.h>
 #include <objc/message.h>
+#include <dlfcn.h>
 
 #define getIvar(object, ivar) [object valueForKey:ivar]
 #define setIvar(object, ivar, value) [object setValue:value forKey:ivar]
@@ -41,6 +42,7 @@ id currentlyHostedAppController = nil;
 id carplayExternalDisplay = nil;
 int lastOrientation = -1;
 NSMutableArray *appIdentifiersToIgnoreLockAssertions = nil;
+int (*orig_BKSDisplayServicesSetScreenBlanked)(int);
 
 /*
 Prevent app from dying when the device locks
@@ -185,6 +187,10 @@ When an app icon is tapped on the Carplay dashboard
     [rootWindow setAlpha:0];
     [rootWindow setHidden:0];
 
+    // "unblank" the screen. This is necessary for animations/video to render when the device is locked.
+    // This does not cause the screen to actually light up
+    orig_BKSDisplayServicesSetScreenBlanked(0);
+
     [UIView animateWithDuration:1.0 animations:^(void)
     {
         [rootWindow setAlpha:1];
@@ -241,6 +247,12 @@ When a CarPlay App is closed
             objcInvoke_1(sceneSettings, @"setBackgrounded:", 1);
             objcInvoke_1(sceneSettings, @"setForeground:", 0);
             ((void (*)(id, SEL, id, id, void *))objc_msgSend)(appScene, NSSelectorFromString(@"updateSettings:withTransitionContext:completion:"), sceneSettings, nil, 0);
+        }
+
+        // If the device is locked, set the screen state to off
+        if (objcInvokeT(sharedApp, @"isLocked", BOOL) == YES)
+        {
+            orig_BKSDisplayServicesSetScreenBlanked(1);
         }
 
         rootWindow = nil;
@@ -344,20 +356,35 @@ Use this to prevent the App from going to sleep when other application's are lau
         {
             if (objcInvokeT(arg1, @"isForeground", BOOL) == NO)
             {
-                NSLog(@"not allowing scene to background: %@", sceneAppBundleID);
                 return;
             }
         }
-    }
-
-    if (objcInvokeT(arg1, @"isForeground", BOOL) == NO) {
-        NSLog(@"scene went to background %@", self);
     }
 
     %orig;
 }
 
 %end
+
+
+int hook_BKSDisplayServicesSetScreenBlanked(int arg1)
+{
+    if (arg1 == 1 && currentlyHostedAppController != nil)
+    {
+        id appScene = objcInvoke(objcInvoke(currentlyHostedAppController, @"sceneHandle"), @"sceneIfExists");
+        NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
+        if ([appIdentifiersToIgnoreLockAssertions containsObject:sceneAppBundleID])
+        {
+            orig_BKSDisplayServicesSetScreenBlanked(1);
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                orig_BKSDisplayServicesSetScreenBlanked(0);
+            });
+            return 0;
+        }
+    }
+
+    return orig_BKSDisplayServicesSetScreenBlanked(arg1);
+}
 
 %end
 
@@ -583,11 +610,13 @@ Called when a window intends to rotate to a new orientation. Used to force lands
 
 %end
 
-
 %ctor {
     if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"SpringBoard"])
     {
         %init(SPRINGBOARD);
+        // Hook BKSDisplayServicesSetScreenBlanked() - necessary for allowing animations/video when the screen is off
+        void *_BKSDisplayServicesSetScreenBlanked = dlsym(dlopen(NULL, 0), "BKSDisplayServicesSetScreenBlanked");
+        MSHookFunction(_BKSDisplayServicesSetScreenBlanked, (void *)hook_BKSDisplayServicesSetScreenBlanked, (void **)&orig_BKSDisplayServicesSetScreenBlanked);
     }
     else if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"CarPlay"])
     {
