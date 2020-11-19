@@ -135,17 +135,22 @@ When an app icon is tapped on the Carplay dashboard
         assertGotExpectedObject(currentlyHostedAppController, @"SBAppViewController");
         objcInvoke_1(currentlyHostedAppController, @"setIgnoresOcclusions:", 0);
         setIvar(currentlyHostedAppController, @"_currentMode", @(2));
+        objcInvoke(getIvar(currentlyHostedAppController, @"_activationSettings"), @"clearActivationSettings");
 
-        __block id sceneUpdateTransaction = objcInvoke_2(currentlyHostedAppController, @"_createSceneUpdateTransactionForApplicationSceneEntity:deliveringActions:", appSceneEntity, 1);
+        id sceneUpdateTransaction = objcInvoke_2(currentlyHostedAppController, @"_createSceneUpdateTransactionForApplicationSceneEntity:deliveringActions:", appSceneEntity, 1);
         assertGotExpectedObject(sceneUpdateTransaction, @"SBApplicationSceneUpdateTransaction");
 
-        objcInvoke(getIvar(currentlyHostedAppController, @"_activationSettings"), @"clearActivationSettings");
+        __block NSMutableArray *transactions = getIvar(currentlyHostedAppController, @"_activeTransitions");
         objcInvoke_1(sceneUpdateTransaction, @"setCompletionBlock:", ^void(int arg1) {
 
-            objcInvoke_1(getIvar(currentlyHostedAppController, @"_activeTransitions"), @"removeObject:", sceneUpdateTransaction);
+            [transactions removeObject:sceneUpdateTransaction];
 
             id processLaunchTransaction = getIvar(sceneUpdateTransaction, @"_processLaunchTransaction");
+            assertGotExpectedObject(processLaunchTransaction, @"FBApplicationProcessLaunchTransaction");
+
             id appProcess = objcInvoke(processLaunchTransaction, @"process");
+            assertGotExpectedObject(appProcess, @"FBProcess");
+
             objcInvoke_1(appProcess, @"_executeBlockAfterLaunchCompletes:", ^void(void) {
                 // Ask the app to rotate to landscape
                 [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:identifier userInfo:@{@"orientation": @(3)}];
@@ -153,7 +158,7 @@ When an app icon is tapped on the Carplay dashboard
             });
         });
 
-        objcInvoke_1(getIvar(currentlyHostedAppController, @"_activeTransitions"), @"addObject:", sceneUpdateTransaction);
+        [transactions addObject:sceneUpdateTransaction];
         objcInvoke(sceneUpdateTransaction, @"begin");
         objcInvoke(currentlyHostedAppController, @"_createSceneViewController");
 
@@ -172,7 +177,7 @@ When an app icon is tapped on the Carplay dashboard
         id defaultWallpaper = objcInvoke(objc_getClass("CRSUIWallpaperPreferences"), @"defaultWallpaper");
         assertGotExpectedObject(defaultWallpaper, @"CRSUIWallpaper");
 
-        UIImage *wallpaperImage = (UIImage *)objcInvoke_1(defaultWallpaper, @"wallpaperImageCompatibleWithTraitCollection:", nil);
+        UIImage *wallpaperImage = objcInvoke_1(defaultWallpaper, @"wallpaperImageCompatibleWithTraitCollection:", nil);
         [wallpaperImageView setImage:wallpaperImage];
         [rootWindow addSubview:wallpaperImageView];
 
@@ -256,11 +261,13 @@ When a CarPlay App is closed
 
         // After the scene returns to the device, release the assertion that prevents suspension
         id appScene = objcInvoke(objcInvoke(currentlyHostedAppController, @"sceneHandle"), @"sceneIfExists");
+        assertGotExpectedObject(appScene, @"FBScene");
+
         NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
         [appIdentifiersToIgnoreLockAssertions removeObject:sceneAppBundleID];
 
         // Send the app to the background *if it is not on the main screen*
-        id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
+        id sharedApp = [UIApplication sharedApplication];
         id frontmostApp = objcInvoke(sharedApp, @"_accessibilityFrontMostApplication");
         BOOL isAppOnMainScreen = frontmostApp && [objcInvoke(frontmostApp, @"bundleIdentifier") isEqualToString:sceneAppBundleID];
         if (!isAppOnMainScreen)
@@ -306,6 +313,8 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
     lastOrientation = desiredOrientation;
 
     id appSceneView = getIvar(getIvar(self, @"_deviceAppViewController"), @"_sceneView");
+    assertGotExpectedObject(appSceneView, @"SBSceneView");
+
     UIView *hostingContentView = getIvar(appSceneView, @"_sceneContentContainerView");
 
     CGRect displayFrame = objcInvokeT(carplayExternalDisplay, @"frame", CGRect);
@@ -532,7 +541,7 @@ When an app is launched via Carplay dashboard
 {
     if ([objcInvoke(arg1, @"tags") containsObject:@"CarPlayEnable"])
     {
-        id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
+        id sharedApp = [UIApplication sharedApplication];
         id appHistory = objcInvoke(sharedApp, @"_currentAppHistory");
 
         NSString *previousBundleID = nil;
@@ -570,7 +579,7 @@ When an app is launched via the Carplay Dock
     %orig;
 
     NSString *bundleID = objcInvoke(arg1, @"bundleIdentifier");
-    id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
+    id sharedApp = [UIApplication sharedApplication];
     id appLibrary = objcInvoke(sharedApp, @"sharedApplicationLibrary");
     id selectedAppInfo = objcInvoke_1(appLibrary, @"applicationInfoForBundleIdentifier:", bundleID);
     if ([objcInvoke(selectedAppInfo, @"tags") containsObject:@"CarPlayEnable"])
@@ -630,15 +639,13 @@ When Carplay window is requesting the app to rotate
     int orientationToRequest = orientationOverride;
     if (orientationToRequest == -1)
     {
-        id currentDevice = objcInvoke(objc_getClass("UIDevice"), @"currentDevice");
-        orientationToRequest = objcInvokeT(currentDevice, @"orientation", int);
+        orientationToRequest = [[UIDevice currentDevice] orientation];
         // sometimes 0?
         orientationToRequest = MAX(1, orientationToRequest);
     }
 
-    id sharedApp = objcInvoke(objc_getClass("UIApplication"), @"sharedApplication");
     // might not be created yet...
-    UIWindow *keyWindow = objcInvoke(sharedApp, @"keyWindow");
+    UIWindow *keyWindow = objcInvoke([UIApplication sharedApplication], @"keyWindow");
     objcInvoke_3(keyWindow, @"_setRotatableViewOrientation:duration:force:", orientationToRequest, 0, 1);
 }
 
