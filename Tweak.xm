@@ -9,7 +9,7 @@
 #define objcInvoke_1(a, b, c) ((id (*)(id, SEL, typeof(c)))objc_msgSend)(a, NSSelectorFromString(b), c)
 #define objcInvoke_2(a, b, c, d) ((id (*)(id, SEL, typeof(c), typeof(d)))objc_msgSend)(a, NSSelectorFromString(b), c, d)
 #define objcInvoke_3(a, b, c, d, e) ((id (*)(id, SEL, typeof(c), typeof(d), typeof(e)))objc_msgSend)(a, NSSelectorFromString(b), c, d, e)
-
+#define assertGotExpectedObject(obj, type) if (!obj || ![obj isKindOfClass:NSClassFromString(type)]) [NSException raise:@"UnexpectedObjectException" format:@"Expected %@ but got %@", type, obj]
 
 /*
 Find the CADisplay handling the CarPlay stuff
@@ -57,7 +57,7 @@ Prevent app from dying when the device locks
     {
         shouldBackground = NO;
     }
-    NSLog(@"forcing allow background %d %@ %@", shouldBackground, arg2, arg3);
+
     return shouldBackground;
 }
 
@@ -99,108 +99,125 @@ When an app icon is tapped on the Carplay dashboard
 %new
 - (void)handleCarPlayLaunchNotification:(id)notification
 {
-    NSString *identifier = [notification userInfo][@"identifier"];
-    id targetApp = objcInvoke_1(objcInvoke(objc_getClass("SBApplicationController"), @"sharedInstance"), @"applicationWithBundleIdentifier:", identifier);
-    if (!targetApp)
+    @try
     {
-        NSLog(@"the requested app doesn't exist: %@", identifier);
-        return;
-    }
+        NSString *identifier = [notification userInfo][@"identifier"];
+        id targetApp = objcInvoke_1(objcInvoke(objc_getClass("SBApplicationController"), @"sharedInstance"), @"applicationWithBundleIdentifier:", identifier);
+        assertGotExpectedObject(targetApp, @"SBApplication");
 
-    carplayExternalDisplay = getCarplayCADisplay();
-    if (!carplayExternalDisplay)
-    {
-        NSLog(@"cannot find a carplay display");
-        return;
-    }
+        carplayExternalDisplay = getCarplayCADisplay();
+        assertGotExpectedObject(carplayExternalDisplay, @"CADisplay");
 
-    [appIdentifiersToIgnoreLockAssertions addObject:identifier];
+        [appIdentifiersToIgnoreLockAssertions addObject:identifier];
 
-    id displayConfiguration = objcInvoke_2([objc_getClass("FBSDisplayConfiguration") alloc], @"initWithCADisplay:isMainDisplay:", carplayExternalDisplay, 0);
+        id displayConfiguration = objcInvoke_2([objc_getClass("FBSDisplayConfiguration") alloc], @"initWithCADisplay:isMainDisplay:", carplayExternalDisplay, 0);
+        assertGotExpectedObject(displayConfiguration, @"FBSDisplayConfiguration");
 
-    id displaySceneManager = objcInvoke(objc_getClass("SBSceneManagerCoordinator"), @"mainDisplaySceneManager");
-    id mainScreenIdentity = objcInvoke(displaySceneManager, @"displayIdentity");
+        id displaySceneManager = objcInvoke(objc_getClass("SBSceneManagerCoordinator"), @"mainDisplaySceneManager");
+        assertGotExpectedObject(displaySceneManager, @"SBMainDisplaySceneManager");
 
-    id sceneIdentity = objcInvoke_2(displaySceneManager, @"_sceneIdentityForApplication:createPrimaryIfRequired:", targetApp, 1);
-    id sceneHandleRequest = objcInvoke_3(objc_getClass("SBApplicationSceneHandleRequest"), @"defaultRequestForApplication:sceneIdentity:displayIdentity:", targetApp, sceneIdentity, mainScreenIdentity);
+        id mainScreenIdentity = objcInvoke(displaySceneManager, @"displayIdentity");
+        assertGotExpectedObject(mainScreenIdentity, @"FBSDisplayIdentity");
 
-    id sceneHandle = objcInvoke_1(displaySceneManager, @"fetchOrCreateApplicationSceneHandleForRequest:", sceneHandleRequest);
-    id appSceneEntity = objcInvoke_1([objc_getClass("SBDeviceApplicationSceneEntity") alloc], @"initWithApplicationSceneHandle:", sceneHandle);
+        id sceneIdentity = objcInvoke_2(displaySceneManager, @"_sceneIdentityForApplication:createPrimaryIfRequired:", targetApp, 1);
+        assertGotExpectedObject(sceneIdentity, @"FBSSceneIdentity");
 
-    currentlyHostedAppController = objcInvoke_2([objc_getClass("SBAppViewController") alloc], @"initWithIdentifier:andApplicationSceneEntity:", identifier, appSceneEntity);
-    objcInvoke_1(currentlyHostedAppController, @"setIgnoresOcclusions:", 0);
-    setIvar(currentlyHostedAppController, @"_currentMode", @(2));
+        id sceneHandleRequest = objcInvoke_3(objc_getClass("SBApplicationSceneHandleRequest"), @"defaultRequestForApplication:sceneIdentity:displayIdentity:", targetApp, sceneIdentity, mainScreenIdentity);
+        assertGotExpectedObject(sceneHandleRequest, @"SBApplicationSceneHandleRequest");
 
-    __block id sceneUpdateTransaction = objcInvoke_2(currentlyHostedAppController, @"_createSceneUpdateTransactionForApplicationSceneEntity:deliveringActions:", appSceneEntity, 1);
+        id sceneHandle = objcInvoke_1(displaySceneManager, @"fetchOrCreateApplicationSceneHandleForRequest:", sceneHandleRequest);
+        assertGotExpectedObject(sceneHandle, @"SBDeviceApplicationSceneHandle");
 
-    objcInvoke(getIvar(currentlyHostedAppController, @"_activationSettings"), @"clearActivationSettings");
-    objcInvoke_1(sceneUpdateTransaction, @"setCompletionBlock:", ^void(int arg1) {
+        id appSceneEntity = objcInvoke_1([objc_getClass("SBDeviceApplicationSceneEntity") alloc], @"initWithApplicationSceneHandle:", sceneHandle);
+        assertGotExpectedObject(appSceneEntity, @"SBDeviceApplicationSceneEntity");
 
-        objcInvoke_1(getIvar(currentlyHostedAppController, @"_activeTransitions"), @"removeObject:", sceneUpdateTransaction);
+        currentlyHostedAppController = objcInvoke_2([objc_getClass("SBAppViewController") alloc], @"initWithIdentifier:andApplicationSceneEntity:", identifier, appSceneEntity);
+        assertGotExpectedObject(currentlyHostedAppController, @"SBAppViewController");
+        objcInvoke_1(currentlyHostedAppController, @"setIgnoresOcclusions:", 0);
+        setIvar(currentlyHostedAppController, @"_currentMode", @(2));
 
-        id processLaunchTransaction = getIvar(sceneUpdateTransaction, @"_processLaunchTransaction");
-        id appProcess = objcInvoke(processLaunchTransaction, @"process");
-        objcInvoke_1(appProcess, @"_executeBlockAfterLaunchCompletes:", ^void(void) {
-            // Ask the app to rotate to landscape
-            [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:identifier userInfo:@{@"orientation": @(3)}];
+        __block id sceneUpdateTransaction = objcInvoke_2(currentlyHostedAppController, @"_createSceneUpdateTransactionForApplicationSceneEntity:deliveringActions:", appSceneEntity, 1);
+        assertGotExpectedObject(sceneUpdateTransaction, @"SBApplicationSceneUpdateTransaction");
 
+        objcInvoke(getIvar(currentlyHostedAppController, @"_activationSettings"), @"clearActivationSettings");
+        objcInvoke_1(sceneUpdateTransaction, @"setCompletionBlock:", ^void(int arg1) {
+
+            objcInvoke_1(getIvar(currentlyHostedAppController, @"_activeTransitions"), @"removeObject:", sceneUpdateTransaction);
+
+            id processLaunchTransaction = getIvar(sceneUpdateTransaction, @"_processLaunchTransaction");
+            id appProcess = objcInvoke(processLaunchTransaction, @"process");
+            objcInvoke_1(appProcess, @"_executeBlockAfterLaunchCompletes:", ^void(void) {
+                // Ask the app to rotate to landscape
+                [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:identifier userInfo:@{@"orientation": @(3)}];
+
+            });
         });
-    });
 
-    objcInvoke_1(getIvar(currentlyHostedAppController, @"_activeTransitions"), @"addObject:", sceneUpdateTransaction);
-    objcInvoke(sceneUpdateTransaction, @"begin");
-    objcInvoke(currentlyHostedAppController, @"_createSceneViewController");
+        objcInvoke_1(getIvar(currentlyHostedAppController, @"_activeTransitions"), @"addObject:", sceneUpdateTransaction);
+        objcInvoke(sceneUpdateTransaction, @"begin");
+        objcInvoke(currentlyHostedAppController, @"_createSceneViewController");
 
-    id animationFactory = objcInvoke(objc_getClass("SBApplicationSceneView"), @"defaultDisplayModeAnimationFactory");
-    id appView = objcInvoke(currentlyHostedAppController, @"appView");
-    objcInvoke_3(appView, @"setDisplayMode:animationFactory:completion:", 4, animationFactory, 0);
+        id animationFactory = objcInvoke(objc_getClass("SBApplicationSceneView"), @"defaultDisplayModeAnimationFactory");
+        assertGotExpectedObject(animationFactory, @"BSUIAnimationFactory");
 
-    UIWindow *rootWindow = objcInvoke_1([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
-    CGRect rootWindowFrame = [rootWindow frame];
+        id appView = objcInvoke(currentlyHostedAppController, @"appView");
+        objcInvoke_3(appView, @"setDisplayMode:animationFactory:completion:", 4, animationFactory, 0);
+        [[currentlyHostedAppController view] setBackgroundColor:[UIColor clearColor]];
 
-    UIImageView *wallpaperImageView = [[UIImageView alloc] initWithFrame:rootWindowFrame];
-    id defaultWallpaper = objcInvoke(objc_getClass("CRSUIWallpaperPreferences"), @"defaultWallpaper");
-    UIImage *wallpaperImage = (UIImage *)objcInvoke_1(defaultWallpaper, @"wallpaperImageCompatibleWithTraitCollection:", nil);
-    [wallpaperImageView setImage:wallpaperImage];
-    [rootWindow addSubview:wallpaperImageView];
+        UIWindow *rootWindow = objcInvoke_1([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
+        CGRect rootWindowFrame = [rootWindow frame];
 
-    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(40, rootWindowFrame.origin.y, rootWindowFrame.size.width - 40, rootWindowFrame.size.height)];
-    [container setBackgroundColor:[UIColor clearColor]];
-    [container addSubview:objcInvoke(currentlyHostedAppController, @"view")];
-    [rootWindow addSubview:container];
+        // Add the user's wallpaper to the window. It will be visible when the app is in portrait mode
+        UIImageView *wallpaperImageView = [[UIImageView alloc] initWithFrame:rootWindowFrame];
+        id defaultWallpaper = objcInvoke(objc_getClass("CRSUIWallpaperPreferences"), @"defaultWallpaper");
+        assertGotExpectedObject(defaultWallpaper, @"CRSUIWallpaper");
 
-    UIView *sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, rootWindowFrame.origin.y, 40, rootWindowFrame.size.height)];
-    [sidebarView setBackgroundColor:[UIColor lightGrayColor]];
-    [rootWindow addSubview:sidebarView];
+        UIImage *wallpaperImage = (UIImage *)objcInvoke_1(defaultWallpaper, @"wallpaperImageCompatibleWithTraitCollection:", nil);
+        [wallpaperImageView setImage:wallpaperImage];
+        [rootWindow addSubview:wallpaperImageView];
 
-    id imageConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:40];
+        UIView *container = [[UIView alloc] initWithFrame:CGRectMake(40, rootWindowFrame.origin.y, rootWindowFrame.size.width - 40, rootWindowFrame.size.height)];
+        [container setBackgroundColor:[UIColor clearColor]];
+        [container addSubview:objcInvoke(currentlyHostedAppController, @"view")];
+        [rootWindow addSubview:container];
 
-    UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    [closeButton setImage:[UIImage systemImageNamed:@"xmark.circle" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
-    [closeButton addTarget:self action:@selector(dismiss:) forControlEvents:UIControlEventTouchUpInside];
-    [closeButton setFrame:CGRectMake(0, 10, 35.0, 35.0)];
-    [closeButton setTintColor:[UIColor blackColor]];
-    [sidebarView addSubview:closeButton];
+        UIView *sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, rootWindowFrame.origin.y, 40, rootWindowFrame.size.height)];
+        [sidebarView setBackgroundColor:[UIColor lightGrayColor]];
+        [rootWindow addSubview:sidebarView];
 
-    UIButton *rotateButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    [rotateButton setImage:[UIImage systemImageNamed:@"rotate.right" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
-    [rotateButton addTarget:self action:@selector(handleRotate:) forControlEvents:UIControlEventTouchUpInside];
-    [rotateButton setFrame:CGRectMake(0, rootWindowFrame.size.height - 45, 35.0, 35.0)];
-    [rotateButton setTintColor:[UIColor blackColor]];
-    [sidebarView addSubview:rotateButton];
+        id imageConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:40];
 
-    objcInvoke_1(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:", 3);
-    [rootWindow setAlpha:0];
-    [rootWindow setHidden:0];
+        UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        [closeButton setImage:[UIImage systemImageNamed:@"xmark.circle" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
+        [closeButton addTarget:self action:@selector(dismiss:) forControlEvents:UIControlEventTouchUpInside];
+        [closeButton setFrame:CGRectMake(0, 10, 35.0, 35.0)];
+        [closeButton setTintColor:[UIColor blackColor]];
+        [sidebarView addSubview:closeButton];
 
-    // "unblank" the screen. This is necessary for animations/video to render when the device is locked.
-    // This does not cause the screen to actually light up
-    orig_BKSDisplayServicesSetScreenBlanked(0);
+        UIButton *rotateButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        [rotateButton setImage:[UIImage systemImageNamed:@"rotate.right" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
+        [rotateButton addTarget:self action:@selector(handleRotate:) forControlEvents:UIControlEventTouchUpInside];
+        [rotateButton setFrame:CGRectMake(0, rootWindowFrame.size.height - 45, 35.0, 35.0)];
+        [rotateButton setTintColor:[UIColor blackColor]];
+        [sidebarView addSubview:rotateButton];
 
-    [UIView animateWithDuration:1.0 animations:^(void)
+        objcInvoke_1(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:", 3);
+        [rootWindow setAlpha:0];
+        [rootWindow setHidden:0];
+
+        // "unblank" the screen. This is necessary for animations/video to render when the device is locked.
+        // This does not cause the screen to actually light up
+        orig_BKSDisplayServicesSetScreenBlanked(0);
+
+        [UIView animateWithDuration:1.0 animations:^(void)
+        {
+            [rootWindow setAlpha:1];
+        } completion:nil];
+    }
+    @catch (NSException *exception)
     {
-        [rootWindow setAlpha:1];
-    } completion:nil];
+        NSLog(@"failed! %@", exception);
+    }
 }
 
 /*
@@ -248,7 +265,6 @@ When a CarPlay App is closed
         BOOL isAppOnMainScreen = frontmostApp && [objcInvoke(frontmostApp, @"bundleIdentifier") isEqualToString:sceneAppBundleID];
         if (!isAppOnMainScreen)
         {
-            NSLog(@"app not foreground, sending to back");
             id sceneSettings = objcInvoke(appScene, @"mutableSettings");
             objcInvoke_1(sceneSettings, @"setBackgrounded:", 1);
             objcInvoke_1(sceneSettings, @"setForeground:", 0);
