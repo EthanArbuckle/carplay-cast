@@ -606,6 +606,46 @@ Used for adding "carplay declaration" to newly installed apps so they appear on 
 
 %end
 
+%hook CARIconView
+
+%new
+- (void)handleLaunchAppInNormalMode:(UILongPressGestureRecognizer *)gesture
+{
+    if ([gesture state] == UIGestureRecognizerStateBegan)
+    {
+        id sharedApp = [UIApplication sharedApplication];
+        id appHistory = objcInvoke(sharedApp, @"_currentAppHistory");
+
+        NSString *previousBundleID = nil;
+        NSArray *orderedAppHistory = objcInvoke(appHistory, @"orderedAppHistory");
+        if ([orderedAppHistory count] > 0)
+        {
+            previousBundleID = objcInvoke([orderedAppHistory firstObject], @"bundleIdentifier");
+        }
+
+        id icon = objcInvoke(self, @"icon");
+        assertGotExpectedObject(icon, @"SBIcon");
+        NSString *bundleID = objcInvoke(icon, @"applicationBundleID");
+        ((void (*)(id, SEL, id, id))objc_msgSend)(appHistory, NSSelectorFromString(@"_bundleIdentifierDidBecomeVisible:previousBundleIdentifier:"), bundleID, previousBundleID);
+
+        id dashboardRootController = objcInvoke(objcInvoke(sharedApp, @"_currentDashboard"), @"rootViewController");
+        id dockController = objcInvoke(dashboardRootController, @"appDockViewController");
+        objcInvoke(dockController, @"_refreshAppDock");
+
+        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable" object:nil userInfo:@{@"identifier": bundleID}];
+    }
+}
+
+- (id)initWithConfigurationOptions:(unsigned long long)arg1 listLayoutProvider:(id)arg2
+{
+    id _self = %orig;
+    UILongPressGestureRecognizer *launchGesture = [[UILongPressGestureRecognizer alloc] initWithTarget:_self action:NSSelectorFromString(@"handleLaunchAppInNormalMode:")];
+    [launchGesture setMinimumPressDuration:1.5];
+    [_self addGestureRecognizer:launchGesture];
+    return _self;
+}
+%end
+
 %end
 
 /*
