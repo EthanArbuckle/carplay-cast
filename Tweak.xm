@@ -158,6 +158,12 @@ When an app icon is tapped on the Carplay dashboard
     UIWindow *rootWindow = objcInvoke_1([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
     CGRect rootWindowFrame = [rootWindow frame];
 
+    UIImageView *wallpaperImageView = [[UIImageView alloc] initWithFrame:rootWindowFrame];
+    id defaultWallpaper = objcInvoke(objc_getClass("CRSUIWallpaperPreferences"), @"defaultWallpaper");
+    UIImage *wallpaperImage = (UIImage *)objcInvoke_1(defaultWallpaper, @"wallpaperImageCompatibleWithTraitCollection:", nil);
+    [wallpaperImageView setImage:wallpaperImage];
+    [rootWindow addSubview:wallpaperImageView];
+
     UIView *container = [[UIView alloc] initWithFrame:CGRectMake(40, rootWindowFrame.origin.y, rootWindowFrame.size.width - 40, rootWindowFrame.size.height)];
     [container setBackgroundColor:[UIColor clearColor]];
     [container addSubview:objcInvoke(currentlyHostedAppController, @"view")];
