@@ -541,6 +541,8 @@ When an app is launched via Carplay dashboard
 {
     if ([objcInvoke(arg1, @"tags") containsObject:@"CarPlayEnable"])
     {
+        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable" object:nil userInfo:@{@"identifier": objcInvoke(arg1, @"bundleIdentifier")}];
+
         id sharedApp = [UIApplication sharedApplication];
         id appHistory = objcInvoke(sharedApp, @"_currentAppHistory");
 
@@ -557,7 +559,16 @@ When an app is launched via Carplay dashboard
         id dockController = objcInvoke(dashboardRootController, @"appDockViewController");
         objcInvoke(dockController, @"_refreshAppDock");
 
-        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable" object:nil userInfo:@{@"identifier": objcInvoke(arg1, @"bundleIdentifier")}];
+        // If the is already a Carplay app running, close it
+        id dashboard = objcInvoke(sharedApp, @"_currentDashboard");
+        assertGotExpectedObject(dashboard, @"CARDashboard");
+        NSDictionary *foregroundScenes = objcInvoke(dashboard, @"identifierToForegroundAppScenesMap");
+        if ([[foregroundScenes allKeys] count] > 0)
+        {
+            id homeButtonEvent = objcInvoke_2(objc_getClass("CAREvent"), @"eventWithType:context:", 1, @"Close carplay app");
+            assertGotExpectedObject(homeButtonEvent, @"CAREvent");
+            objcInvoke_1(dashboard, @"handleEvent:", homeButtonEvent);
+        }
 
         return nil;
     }
@@ -613,6 +624,12 @@ Used for adding "carplay declaration" to newly installed apps so they appear on 
 {
     if ([gesture state] == UIGestureRecognizerStateBegan)
     {
+        id icon = objcInvoke(self, @"icon");
+        assertGotExpectedObject(icon, @"SBIcon");
+        NSString *bundleID = objcInvoke(icon, @"applicationBundleID");
+
+        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable" object:nil userInfo:@{@"identifier": bundleID}];
+
         id sharedApp = [UIApplication sharedApplication];
         id appHistory = objcInvoke(sharedApp, @"_currentAppHistory");
 
@@ -622,17 +639,11 @@ Used for adding "carplay declaration" to newly installed apps so they appear on 
         {
             previousBundleID = objcInvoke([orderedAppHistory firstObject], @"bundleIdentifier");
         }
-
-        id icon = objcInvoke(self, @"icon");
-        assertGotExpectedObject(icon, @"SBIcon");
-        NSString *bundleID = objcInvoke(icon, @"applicationBundleID");
         ((void (*)(id, SEL, id, id))objc_msgSend)(appHistory, NSSelectorFromString(@"_bundleIdentifierDidBecomeVisible:previousBundleIdentifier:"), bundleID, previousBundleID);
 
         id dashboardRootController = objcInvoke(objcInvoke(sharedApp, @"_currentDashboard"), @"rootViewController");
         id dockController = objcInvoke(dashboardRootController, @"appDockViewController");
         objcInvoke(dockController, @"_refreshAppDock");
-
-        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable" object:nil userInfo:@{@"identifier": bundleID}];
     }
 }
 
