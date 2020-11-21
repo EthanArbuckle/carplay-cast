@@ -7,7 +7,6 @@
    <key>Bundles</key>
    <array>
     <string>com.apple.UIKit</string>
-    <string>com.apple.mediaserverd</string>
    </array>
   </dict>
  </dict>
