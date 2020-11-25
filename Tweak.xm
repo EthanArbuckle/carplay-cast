@@ -131,16 +131,16 @@ When an app icon is tapped on the Carplay dashboard
         id appSceneEntity = objcInvoke_1([objc_getClass("SBDeviceApplicationSceneEntity") alloc], @"initWithApplicationSceneHandle:", sceneHandle);
         assertGotExpectedObject(appSceneEntity, @"SBDeviceApplicationSceneEntity");
 
-        currentlyHostedAppController = objcInvoke_2([objc_getClass("SBAppViewController") alloc], @"initWithIdentifier:andApplicationSceneEntity:", identifier, appSceneEntity);
-        assertGotExpectedObject(currentlyHostedAppController, @"SBAppViewController");
-        objcInvoke_1(currentlyHostedAppController, @"setIgnoresOcclusions:", 0);
-        setIvar(currentlyHostedAppController, @"_currentMode", @(2));
-        objcInvoke(getIvar(currentlyHostedAppController, @"_activationSettings"), @"clearActivationSettings");
+        id appViewController = objcInvoke_2([objc_getClass("SBAppViewController") alloc], @"initWithIdentifier:andApplicationSceneEntity:", identifier, appSceneEntity);
+        assertGotExpectedObject(appViewController, @"SBAppViewController");
+        objcInvoke_1(appViewController, @"setIgnoresOcclusions:", 0);
+        setIvar(appViewController, @"_currentMode", @(2));
+        objcInvoke(getIvar(appViewController, @"_activationSettings"), @"clearActivationSettings");
 
-        id sceneUpdateTransaction = objcInvoke_2(currentlyHostedAppController, @"_createSceneUpdateTransactionForApplicationSceneEntity:deliveringActions:", appSceneEntity, 1);
+        id sceneUpdateTransaction = objcInvoke_2(appViewController, @"_createSceneUpdateTransactionForApplicationSceneEntity:deliveringActions:", appSceneEntity, 1);
         assertGotExpectedObject(sceneUpdateTransaction, @"SBApplicationSceneUpdateTransaction");
 
-        __block NSMutableArray *transactions = getIvar(currentlyHostedAppController, @"_activeTransitions");
+        __block NSMutableArray *transactions = getIvar(appViewController, @"_activeTransitions");
         objcInvoke_1(sceneUpdateTransaction, @"setCompletionBlock:", ^void(int arg1) {
 
             [transactions removeObject:sceneUpdateTransaction];
@@ -160,14 +160,14 @@ When an app icon is tapped on the Carplay dashboard
 
         [transactions addObject:sceneUpdateTransaction];
         objcInvoke(sceneUpdateTransaction, @"begin");
-        objcInvoke(currentlyHostedAppController, @"_createSceneViewController");
+        objcInvoke(appViewController, @"_createSceneViewController");
 
         id animationFactory = objcInvoke(objc_getClass("SBApplicationSceneView"), @"defaultDisplayModeAnimationFactory");
         assertGotExpectedObject(animationFactory, @"BSUIAnimationFactory");
 
-        id appView = objcInvoke(currentlyHostedAppController, @"appView");
+        id appView = objcInvoke(appViewController, @"appView");
         objcInvoke_3(appView, @"setDisplayMode:animationFactory:completion:", 4, animationFactory, 0);
-        [[currentlyHostedAppController view] setBackgroundColor:[UIColor clearColor]];
+        [[appViewController view] setBackgroundColor:[UIColor clearColor]];
 
         UIWindow *rootWindow = objcInvoke_1([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
         CGRect rootWindowFrame = [rootWindow frame];
@@ -183,7 +183,7 @@ When an app icon is tapped on the Carplay dashboard
 
         UIView *container = [[UIView alloc] initWithFrame:CGRectMake(40, rootWindowFrame.origin.y, rootWindowFrame.size.width - 40, rootWindowFrame.size.height)];
         [container setBackgroundColor:[UIColor clearColor]];
-        [container addSubview:objcInvoke(currentlyHostedAppController, @"view")];
+        [container addSubview:objcInvoke(appViewController, @"view")];
         [rootWindow addSubview:container];
 
         UIView *sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, rootWindowFrame.origin.y, 40, rootWindowFrame.size.height)];
@@ -206,7 +206,7 @@ When an app icon is tapped on the Carplay dashboard
         [rotateButton setTintColor:[UIColor blackColor]];
         [sidebarView addSubview:rotateButton];
 
-        objcInvoke_1(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:", 3);
+        objcInvoke_1(appViewController, @"resizeHostedAppForCarplayDisplay:", 3);
         [rootWindow setAlpha:0];
         [rootWindow setHidden:0];
 
@@ -218,6 +218,62 @@ When an app icon is tapped on the Carplay dashboard
         {
             [rootWindow setAlpha:1];
         } completion:nil];
+
+        id mainSceneLayoutController = objcInvoke(objc_getClass("SBMainDisplaySceneLayoutViewController"), @"mainDisplaySceneLayoutViewController");
+        id liveAppSceneControllers = objcInvoke(mainSceneLayoutController, @"appViewControllers");
+        for (id appSceneLayoutController in liveAppSceneControllers)
+        {
+            id appSceneController = objcInvoke(appSceneLayoutController, @"_applicationSceneViewController");
+            id appSceneView = objcInvoke(appSceneController, @"_sceneView");
+            id appSceneHandle = objcInvoke(appSceneView, @"sceneHandle");
+            if ([appSceneHandle isEqual:sceneHandle])
+            {
+                UIView *backgroundView = objcInvoke(appSceneView, @"backgroundView");
+                objcInvoke_1(backgroundView, @"setWallpaperStyle:", 18);
+
+                id orientationTransformedView = nil;
+                id _candidate = [appSceneView superview];
+                while (_candidate != nil)
+                {
+                    if (_candidate && [_candidate isKindOfClass:objc_getClass("SBOrientationTransformWrapperView")])
+                    {
+                        orientationTransformedView = _candidate;
+                        break;
+                    }
+                    _candidate = [_candidate superview];
+                }
+
+                if (orientationTransformedView != nil)
+                {
+                    UILabel *hostedOnCarplayLabel = [[UILabel alloc] initWithFrame:CGRectMake(150, 300, 300, 50)];
+                    [hostedOnCarplayLabel setText:@"Running on CarPlay Screen"];
+                    [hostedOnCarplayLabel setTextAlignment:NSTextAlignmentCenter];
+                    [hostedOnCarplayLabel setCenter:[backgroundView center]];
+                    [hostedOnCarplayLabel setHidden:1];
+                    [backgroundView addSubview:hostedOnCarplayLabel];
+
+                    UIButton *sbDismissButton = [UIButton buttonWithType:UIButtonTypeCustom];
+                    [sbDismissButton setImage:[UIImage systemImageNamed:@"xmark.circle" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
+                    [sbDismissButton addTarget:appViewController action:@selector(dismiss) forControlEvents:UIControlEventTouchUpInside];
+                    [sbDismissButton setFrame:CGRectMake(([[UIScreen mainScreen] bounds].size.width / 2) - (70.0 / 2), hostedOnCarplayLabel.frame.origin.y + 70, 70.0, 70.0)];
+                    [sbDismissButton setTintColor:[UIColor blackColor]];
+                    [sbDismissButton setHidden:1];
+                    [backgroundView addSubview:sbDismissButton];
+
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                        int deviceOrientation = [[UIDevice currentDevice] orientation];
+                        objcInvoke_1(orientationTransformedView, @"setContentOrientation:", deviceOrientation);
+
+                        [hostedOnCarplayLabel setHidden:0];
+                        [sbDismissButton setHidden:0];
+                    });
+                }
+
+                objcInvoke_3(appSceneView, @"setDisplayMode:animationFactory:completion:", 1, animationFactory, nil);
+            }
+        }
+
+        currentlyHostedAppController = appViewController;
     }
     @catch (NSException *exception)
     {
@@ -258,6 +314,20 @@ When a CarPlay App is closed
         objcInvoke_1(rootWindow, @"setHidden:", 1);
         objcInvoke_1(self, @"_setCurrentMode:", 0);
         [[self view] removeFromSuperview];
+
+        id currentSceneHandle = objcInvoke(self, @"sceneHandle");
+        id mainSceneLayoutController = objcInvoke(objc_getClass("SBMainDisplaySceneLayoutViewController"), @"mainDisplaySceneLayoutViewController");
+        id liveAppSceneControllers = objcInvoke(mainSceneLayoutController, @"appViewControllers");
+        for (id appSceneLayoutController in liveAppSceneControllers)
+        {
+            id appSceneController = objcInvoke(appSceneLayoutController, @"_applicationSceneViewController");
+            id appSceneView = objcInvoke(appSceneController, @"_sceneView");
+            id appSceneHandle = objcInvoke(appSceneView, @"sceneHandle");
+            if ([appSceneHandle isEqual:currentSceneHandle])
+            {
+                objcInvoke_3(appSceneView, @"setDisplayMode:animationFactory:completion:", 4, nil, nil);
+            }
+        }
 
         // After the scene returns to the device, release the assertion that prevents suspension
         id appScene = objcInvoke(objcInvoke(currentlyHostedAppController, @"sceneHandle"), @"sceneIfExists");
@@ -397,6 +467,34 @@ Use this to prevent the App from going to sleep when other application's are lau
 
 %end
 
+
+%hook SBDeviceApplicationSceneView
+
+- (id)initWithSceneHandle:(id)arg1 referenceSize:(struct CGSize)arg2 orientation:(long long)arg3 hostRequester:(id)arg4
+{
+    NSLog(@"initWithSceneHandle");
+    id _self = %orig;
+
+    if (currentlyHostedAppController != nil)
+    {
+        id currentSceneHandle = objcInvoke(_self, @"sceneHandle");
+        id carplaySceneHandle = objcInvoke(currentlyHostedAppController, @"sceneHandle");
+        if ([currentSceneHandle isEqual:carplaySceneHandle])
+        {
+            NSLog(@"this scene is on the carplay unit");
+
+            id backgroundView = objcInvoke(_self, @"backgroundView");
+            objcInvoke_1(backgroundView, @"setWallpaperStyle:", 18);
+
+            objcInvoke_3(_self, @"setDisplayMode:animationFactory:completion:", 1, nil, nil);
+        }
+
+    }
+
+    return _self;
+}
+
+%end
 
 /*
 Called when the device's main screen is turning on or off
