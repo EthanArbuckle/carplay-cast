@@ -4,11 +4,13 @@
 
 #define getIvar(object, ivar) [object valueForKey:ivar]
 #define setIvar(object, ivar, value) [object setValue:value forKey:ivar]
+
 #define objcInvokeT(a, b, t) ((t (*)(id, SEL))objc_msgSend)(a, NSSelectorFromString(b))
 #define objcInvoke(a, b) objcInvokeT(a, b, id)
 #define objcInvoke_1(a, b, c) ((id (*)(id, SEL, typeof(c)))objc_msgSend)(a, NSSelectorFromString(b), c)
 #define objcInvoke_2(a, b, c, d) ((id (*)(id, SEL, typeof(c), typeof(d)))objc_msgSend)(a, NSSelectorFromString(b), c, d)
 #define objcInvoke_3(a, b, c, d, e) ((id (*)(id, SEL, typeof(c), typeof(d), typeof(e)))objc_msgSend)(a, NSSelectorFromString(b), c, d, e)
+
 #define assertGotExpectedObject(obj, type) if (!obj || ![obj isKindOfClass:NSClassFromString(type)]) [NSException raise:@"UnexpectedObjectException" format:@"Expected %@ but got %@", type, obj]
 
 /*
@@ -43,6 +45,7 @@ id carplayExternalDisplay = nil;
 int lastOrientation = -1;
 NSMutableArray *appIdentifiersToIgnoreLockAssertions = nil;
 int (*orig_BKSDisplayServicesSetScreenBlanked)(int);
+id sceneMonitor = nil;
 
 /*
 Prevent app from dying when the device locks
@@ -66,34 +69,6 @@ Prevent app from dying when the device locks
 %hook SpringBoard
 
 /*
-When the "close" button is pressed on a CarplayEnabled app window
-*/
-%new
-- (void)dismiss:(id)button
-{
-    if (currentlyHostedAppController)
-    {
-        objcInvoke(currentlyHostedAppController, @"dismiss");
-    }
-}
-
-/*
-When the "rotate orientation" button is pressed on a CarplayEnabled app window
-*/
-%new
-- (void)handleRotate:(id)button
-{
-    BOOL wasLandscape = lastOrientation >= 3;
-    int desiredOrientation = (wasLandscape) ? 1 : 3;
-
-    id appScene = objcInvoke(objcInvoke(currentlyHostedAppController, @"sceneHandle"), @"sceneIfExists");
-    NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
-
-    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:sceneAppBundleID userInfo:@{@"orientation": @(desiredOrientation)}];
-    objcInvoke_1(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:", desiredOrientation);
-}
-
-/*
 When an app icon is tapped on the Carplay dashboard
 */
 %new
@@ -115,6 +90,9 @@ When an app icon is tapped on the Carplay dashboard
 
         id displaySceneManager = objcInvoke(objc_getClass("SBSceneManagerCoordinator"), @"mainDisplaySceneManager");
         assertGotExpectedObject(displaySceneManager, @"SBMainDisplaySceneManager");
+
+        id sceneLayoutManager = objcInvoke(displaySceneManager, @"_layoutStateManager");
+        assertGotExpectedObject(sceneLayoutManager, @"SBMainDisplayLayoutStateManager");
 
         id mainScreenIdentity = objcInvoke(displaySceneManager, @"displayIdentity");
         assertGotExpectedObject(mainScreenIdentity, @"FBSDisplayIdentity");
@@ -154,7 +132,6 @@ When an app icon is tapped on the Carplay dashboard
             objcInvoke_1(appProcess, @"_executeBlockAfterLaunchCompletes:", ^void(void) {
                 // Ask the app to rotate to landscape
                 [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:identifier userInfo:@{@"orientation": @(3)}];
-
             });
         });
 
@@ -168,6 +145,11 @@ When an app icon is tapped on the Carplay dashboard
         id appView = objcInvoke(appViewController, @"appView");
         objcInvoke_3(appView, @"setDisplayMode:animationFactory:completion:", 4, animationFactory, 0);
         [[appViewController view] setBackgroundColor:[UIColor clearColor]];
+
+        // Create a scene monitor to watch for the app process dying. The carplay window will dismiss itself
+        NSString *sceneID = objcInvoke_1(sceneLayoutManager, @"primarySceneIdentifierForBundleIdentifier:", identifier);
+        sceneMonitor = objcInvoke_1([objc_getClass("FBSceneMonitor") alloc], @"initWithSceneID:", sceneID);
+        [sceneMonitor setDelegate:appViewController];
 
         UIWindow *rootWindow = objcInvoke_1([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
         CGRect rootWindowFrame = [rootWindow frame];
@@ -194,14 +176,14 @@ When an app icon is tapped on the Carplay dashboard
 
         UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeCustom];
         [closeButton setImage:[UIImage systemImageNamed:@"xmark.circle" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
-        [closeButton addTarget:self action:@selector(dismiss:) forControlEvents:UIControlEventTouchUpInside];
+        [closeButton addTarget:appViewController action:@selector(dismiss) forControlEvents:UIControlEventTouchUpInside];
         [closeButton setFrame:CGRectMake(0, 10, 35.0, 35.0)];
         [closeButton setTintColor:[UIColor blackColor]];
         [sidebarView addSubview:closeButton];
 
         UIButton *rotateButton = [UIButton buttonWithType:UIButtonTypeCustom];
         [rotateButton setImage:[UIImage systemImageNamed:@"rotate.right" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
-        [rotateButton addTarget:self action:@selector(handleRotate:) forControlEvents:UIControlEventTouchUpInside];
+        [rotateButton addTarget:appViewController action:@selector(handleRotate) forControlEvents:UIControlEventTouchUpInside];
         [rotateButton setFrame:CGRectMake(0, rootWindowFrame.size.height - 45, 35.0, 35.0)];
         [rotateButton setTintColor:[UIColor blackColor]];
         [sidebarView addSubview:rotateButton];
@@ -228,48 +210,7 @@ When an app icon is tapped on the Carplay dashboard
             id appSceneHandle = objcInvoke(appSceneView, @"sceneHandle");
             if ([appSceneHandle isEqual:sceneHandle])
             {
-                UIView *backgroundView = objcInvoke(appSceneView, @"backgroundView");
-                objcInvoke_1(backgroundView, @"setWallpaperStyle:", 18);
-
-                id orientationTransformedView = nil;
-                id _candidate = [appSceneView superview];
-                while (_candidate != nil)
-                {
-                    if (_candidate && [_candidate isKindOfClass:objc_getClass("SBOrientationTransformWrapperView")])
-                    {
-                        orientationTransformedView = _candidate;
-                        break;
-                    }
-                    _candidate = [_candidate superview];
-                }
-
-                if (orientationTransformedView != nil)
-                {
-                    UILabel *hostedOnCarplayLabel = [[UILabel alloc] initWithFrame:CGRectMake(150, 300, 300, 50)];
-                    [hostedOnCarplayLabel setText:@"Running on CarPlay Screen"];
-                    [hostedOnCarplayLabel setTextAlignment:NSTextAlignmentCenter];
-                    [hostedOnCarplayLabel setCenter:[backgroundView center]];
-                    [hostedOnCarplayLabel setHidden:1];
-                    [backgroundView addSubview:hostedOnCarplayLabel];
-
-                    UIButton *sbDismissButton = [UIButton buttonWithType:UIButtonTypeCustom];
-                    [sbDismissButton setImage:[UIImage systemImageNamed:@"xmark.circle" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
-                    [sbDismissButton addTarget:appViewController action:@selector(dismiss) forControlEvents:UIControlEventTouchUpInside];
-                    [sbDismissButton setFrame:CGRectMake(([[UIScreen mainScreen] bounds].size.width / 2) - (70.0 / 2), hostedOnCarplayLabel.frame.origin.y + 70, 70.0, 70.0)];
-                    [sbDismissButton setTintColor:[UIColor blackColor]];
-                    [sbDismissButton setHidden:1];
-                    [backgroundView addSubview:sbDismissButton];
-
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                        int deviceOrientation = [[UIDevice currentDevice] orientation];
-                        objcInvoke_1(orientationTransformedView, @"setContentOrientation:", deviceOrientation);
-
-                        [hostedOnCarplayLabel setHidden:0];
-                        [sbDismissButton setHidden:0];
-                    });
-                }
-
-                objcInvoke_3(appSceneView, @"setDisplayMode:animationFactory:completion:", 1, animationFactory, nil);
+                objcInvoke(appSceneView, @"drawCarplayPlaceholder");
             }
         }
 
@@ -298,13 +239,21 @@ Invoked when SpringBoard finishes launching
 
 %hook SBAppViewController
 
+%new
+- (void)sceneMonitor:(id)arg1 sceneWasDestroyed:(id)arg2{
+    NSLog(@"sceneWasDestroyed");
+    objcInvoke(self, @"dismiss");
+}
+
 /*
 When a CarPlay App is closed
 */
 %new
 - (void)dismiss
 {
-     __block id rootWindow = [[[self view] superview] superview];
+    [sceneMonitor invalidate];
+    currentlyHostedAppController = nil;
+    __block id rootWindow = [[[self view] superview] superview];
 
     void (^cleanupAfterCarplay)() = ^() {
         int resetOrientationLock = -1;
@@ -329,23 +278,25 @@ When a CarPlay App is closed
             }
         }
 
-        // After the scene returns to the device, release the assertion that prevents suspension
-        id appScene = objcInvoke(objcInvoke(currentlyHostedAppController, @"sceneHandle"), @"sceneIfExists");
-        assertGotExpectedObject(appScene, @"FBScene");
-
-        NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
-        [appIdentifiersToIgnoreLockAssertions removeObject:sceneAppBundleID];
-
-        // Send the app to the background *if it is not on the main screen*
         id sharedApp = [UIApplication sharedApplication];
-        id frontmostApp = objcInvoke(sharedApp, @"_accessibilityFrontMostApplication");
-        BOOL isAppOnMainScreen = frontmostApp && [objcInvoke(frontmostApp, @"bundleIdentifier") isEqualToString:sceneAppBundleID];
-        if (!isAppOnMainScreen)
+
+        // After the scene returns to the device, release the assertion that prevents suspension
+        id appScene = objcInvoke(objcInvoke(self, @"sceneHandle"), @"sceneIfExists");
+        if (appScene != nil)
         {
-            id sceneSettings = objcInvoke(appScene, @"mutableSettings");
-            objcInvoke_1(sceneSettings, @"setBackgrounded:", 1);
-            objcInvoke_1(sceneSettings, @"setForeground:", 0);
-            ((void (*)(id, SEL, id, id, void *))objc_msgSend)(appScene, NSSelectorFromString(@"updateSettings:withTransitionContext:completion:"), sceneSettings, nil, 0);
+            NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
+            [appIdentifiersToIgnoreLockAssertions removeObject:sceneAppBundleID];
+
+            // Send the app to the background *if it is not on the main screen*
+            id frontmostApp = objcInvoke(sharedApp, @"_accessibilityFrontMostApplication");
+            BOOL isAppOnMainScreen = frontmostApp && [objcInvoke(frontmostApp, @"bundleIdentifier") isEqualToString:sceneAppBundleID];
+            if (!isAppOnMainScreen)
+            {
+                id sceneSettings = objcInvoke(appScene, @"mutableSettings");
+                objcInvoke_1(sceneSettings, @"setBackgrounded:", 1);
+                objcInvoke_1(sceneSettings, @"setForeground:", 0);
+                ((void (*)(id, SEL, id, id, void *))objc_msgSend)(appScene, NSSelectorFromString(@"updateSettings:withTransitionContext:completion:"), sceneSettings, nil, 0);
+            }
         }
 
         // If the device is locked, set the screen state to off
@@ -355,7 +306,6 @@ When a CarPlay App is closed
         }
 
         rootWindow = nil;
-        currentlyHostedAppController = nil;
 
         lastOrientation = resetOrientationLock;
         // todo: resign first responder (kb causes glitches on return)
@@ -368,6 +318,22 @@ When a CarPlay App is closed
     {
         cleanupAfterCarplay();
     }];
+}
+
+/*
+When the "rotate orientation" button is pressed on a CarplayEnabled app window
+*/
+%new
+- (void)handleRotate
+{
+    BOOL wasLandscape = lastOrientation >= 3;
+    int desiredOrientation = (wasLandscape) ? 1 : 3;
+
+    id appScene = objcInvoke(objcInvoke(currentlyHostedAppController, @"sceneHandle"), @"sceneIfExists");
+    NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
+
+    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:sceneAppBundleID userInfo:@{@"orientation": @(desiredOrientation)}];
+    objcInvoke_1(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:", desiredOrientation);
 }
 
 /*
@@ -470,28 +436,153 @@ Use this to prevent the App from going to sleep when other application's are lau
 
 %hook SBDeviceApplicationSceneView
 
-- (id)initWithSceneHandle:(id)arg1 referenceSize:(struct CGSize)arg2 orientation:(long long)arg3 hostRequester:(id)arg4
-{
-    NSLog(@"initWithSceneHandle");
-    id _self = %orig;
+static char *kCarplayPlaceholderDrawnKey;
 
+%new
+- (BOOL)isMainScreenCounterpartToLiveCarplayApp
+{
     if (currentlyHostedAppController != nil)
     {
-        id currentSceneHandle = objcInvoke(_self, @"sceneHandle");
+        id currentSceneHandle = objcInvoke(self, @"sceneHandle");
         id carplaySceneHandle = objcInvoke(currentlyHostedAppController, @"sceneHandle");
         if ([currentSceneHandle isEqual:carplaySceneHandle])
         {
-            NSLog(@"this scene is on the carplay unit");
-
-            id backgroundView = objcInvoke(_self, @"backgroundView");
-            objcInvoke_1(backgroundView, @"setWallpaperStyle:", 18);
-
-            objcInvoke_3(_self, @"setDisplayMode:animationFactory:completion:", 1, nil, nil);
+            id carplayAppViewController = getIvar(currentlyHostedAppController, @"_deviceAppViewController");
+            id carplayAppSceneView = objcInvoke(carplayAppViewController, @"_sceneView");
+            return [self isEqual:carplayAppSceneView] == NO;
         }
-
     }
 
-    return _self;
+    return NO;
+}
+
+- (void)layoutSubviews
+{
+    %orig;
+    BOOL isCarplayCounterpart = objcInvokeT(self, @"isMainScreenCounterpartToLiveCarplayApp", BOOL);
+    if (isCarplayCounterpart)
+    {
+        int currentDisplayMode = objcInvokeT(self, @"displayMode", int);
+        BOOL isHostingAnApp = currentDisplayMode == 4;
+        if (isHostingAnApp)
+        {
+            // Only interested in forcing the layout when this scene is in CustomContent/Placeholder mode
+            return;
+        }
+
+        // The placeholder view will try to match the orientation of the application, which if running on Carplay may not match the orientation of the main screen.
+        // Force the UI to match the main screens orientation. This will end up calling -layoutSubviews again
+        objcInvoke(self, @"rotateToDeviceOrientation");
+
+        UIView *backgroundView = objcInvoke(self, @"backgroundView");
+        int deviceOrientation = [[UIDevice currentDevice] orientation];
+        // Draw the Carplay placeholder UI, but only if this view is being layed out in the correct orientation.
+        // It is expected that this method will be called at least once while the view is in the wrong orientation
+        BOOL bgIsLandscape = [backgroundView frame].size.width > [backgroundView frame].size.height;
+        BOOL deviceIsLandscape = UIInterfaceOrientationIsLandscape(deviceOrientation);
+        if (bgIsLandscape == deviceIsLandscape)
+        {
+            // Orientation expectation satisfied
+            objcInvoke(self, @"drawCarplayPlaceholder");
+        }
+    }
+}
+
+%new
+- (void)rotateToDeviceOrientation
+{
+    UIView *backgroundView = objcInvoke(self, @"backgroundView");
+
+    id orientationTransformedView = nil;
+    id _candidate = [backgroundView superview];
+    while (_candidate != nil)
+    {
+        if (_candidate && [_candidate isKindOfClass:objc_getClass("SBOrientationTransformWrapperView")])
+        {
+            orientationTransformedView = _candidate;
+            break;
+        }
+
+        _candidate = [_candidate superview];
+    }
+
+    if (orientationTransformedView != nil)
+    {
+        int deviceOrientation = [[UIDevice currentDevice] orientation];
+        objcInvoke_1(orientationTransformedView, @"setContentOrientation:", deviceOrientation);
+    }
+}
+
+/*
+An app can only run on 1 screen at a time. If an App is launched on the main screen while also being hosted on
+the carplay screen, the mainscreen will show a blurred background with a label.
+*/
+%new
+- (void)drawCarplayPlaceholder
+{
+    // The background view may have already been drawn on. Use an associated object to determine if its already been handled
+    UIView *backgroundView = objcInvoke(self, @"backgroundView");
+    id hasDrawn = objc_getAssociatedObject(backgroundView, &kCarplayPlaceholderDrawnKey);
+    if (!hasDrawn)
+    {
+        // Not yet drawn. Set associated object to avoid redrawing
+        objc_setAssociatedObject(backgroundView, &kCarplayPlaceholderDrawnKey, @(1), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+        // [[UIScreen mainscreen] bounds] may not be using the correct orientation. Get screen bounds for explicit orientation
+        int deviceOrientation = [[UIDevice currentDevice] orientation];
+        CGRect screenBounds = ((CGRect (*)(id, SEL, int))objc_msgSend)([UIScreen mainScreen], NSSelectorFromString(@"boundsForOrientation:"), deviceOrientation);
+
+        UILabel *hostedOnCarplayLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 300, screenBounds.size.width, 50)];
+        [hostedOnCarplayLabel setText:@"Running on CarPlay Screen"];
+        [hostedOnCarplayLabel setTextAlignment:NSTextAlignmentCenter];
+        [hostedOnCarplayLabel setFont:[UIFont systemFontOfSize:24 weight:UIFontWeightSemibold]];
+        [hostedOnCarplayLabel setCenter:[backgroundView center]];
+        [backgroundView addSubview:hostedOnCarplayLabel];
+    }
+    // Wallpaper style to a nice blur
+    objcInvoke_1(backgroundView, @"setWallpaperStyle:", 18);
+
+    // Set mode to Placeholder (makes the backgroundView become visible)
+    id animationFactory = objcInvoke(objc_getClass("SBApplicationSceneView"), @"defaultDisplayModeAnimationFactory");
+    objcInvoke_3(self, @"setDisplayMode:animationFactory:completion:", 1, animationFactory, nil);
+}
+
+- (void)setDisplayMode:(int)arg1 animationFactory:(id)arg2 completion:(void *)arg3
+{
+    BOOL isCarplayCounterpart = objcInvokeT(self, @"isMainScreenCounterpartToLiveCarplayApp", BOOL);
+    BOOL requestingLiveContent = arg1 == 4;
+    if (requestingLiveContent && isCarplayCounterpart)
+    {
+        // An app is being opened on the mainscreen while already running on the carplay screen.
+        // Force the display mode to Placeholder instead of LiveContent
+        %orig(1, arg2, arg3);
+        return;
+    }
+
+    %orig;
+}
+
+%end
+
+%hook UIScreen
+
+%new
+- (CGRect)boundsForOrientation:(int)orientation
+{
+    CGFloat width = [self bounds].size.width;
+    CGFloat height = [self bounds].size.height;
+
+    CGRect bounds = CGRectZero;
+    if (UIInterfaceOrientationIsLandscape(orientation))
+    {
+        bounds.size = CGSizeMake(MAX(width, height), MIN(width, height));
+    }
+    else
+    {
+        bounds.size = CGSizeMake(MIN(width, height), MAX(width, height));
+    }
+
+    return bounds;
 }
 
 %end
@@ -715,6 +806,12 @@ Used for adding "carplay declaration" to newly installed apps so they appear on 
 
 %end
 
+
+/*
+App icons on the Carplay dashboard.
+For apps that natively support Carplay, add a longpress gesture to launch it in "full mode". Tapping them
+will launch their normal Carplay mode UI
+*/
 %hook CARIconView
 
 %new
@@ -753,6 +850,7 @@ Used for adding "carplay declaration" to newly installed apps so they appear on 
     [_self addGestureRecognizer:launchGesture];
     return _self;
 }
+
 %end
 
 %end
