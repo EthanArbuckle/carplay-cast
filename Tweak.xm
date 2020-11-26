@@ -176,16 +176,26 @@ When an app icon is tapped on the Carplay dashboard
 
         // The scene does not show a launch image, it needs to be created manually.
         // Fetch a snapshot to use
-        id launchImageSnapshotPredicate = [[objc_getClass("XBApplicationSnapshotPredicate") alloc] init];
-        // Always starting in landscape for now
-        objcInvoke_1(launchImageSnapshotPredicate, @"setInterfaceOrientationMask:", UIInterfaceOrientationMaskLandscapeLeft);
-        objcInvoke_1(launchImageSnapshotPredicate, @"setContentTypeMask:", 6);
-
         id launchImageSnapshotManifest = objcInvoke_1([objc_getClass("XBApplicationSnapshotManifest") alloc], @"initWithApplicationInfo:", objcInvoke(targetApp, @"info"));
         NSString *defaultGroupID = objcInvoke(launchImageSnapshotManifest, @"defaultGroupIdentifier");
-
-        NSArray *snapshots = objcInvoke_2(launchImageSnapshotManifest, @"snapshotsForGroupID:matchingPredicate:", defaultGroupID, launchImageSnapshotPredicate);
-        id appSnapshot = [snapshots firstObject];
+        // There's a few variants of snapshots offered: portait/landscape, dark/light.
+        // For now just try to find a landscape snapshot. If no landscape, fallback to portait.
+        // TODO: generate a landscape snapshot after first carplay launch to use on next cold-launch
+        NSArray *snapshots = objcInvoke_1(launchImageSnapshotManifest, @"snapshotsForGroupID:", defaultGroupID);
+        id appSnapshot = nil;
+        for (id snapshotCandidate in snapshots)
+        {
+            int snapshotOrientation = objcInvokeT(snapshotCandidate, @"interfaceOrientation", int);
+            if (UIInterfaceOrientationIsLandscape(snapshotOrientation))
+            {
+                // Prefer a landscape image, but not all apps will have one available
+                appSnapshot = snapshotCandidate;
+                break;
+            }
+            // Not landscape but better than nothing
+            appSnapshot = snapshotCandidate;
+        }
+        // Get the image from the chosen snapshot
         id appSnapshotImage = objcInvoke_1(appSnapshot, @"imageForInterfaceOrientation:", 1);
 
         // Build an imageview to contain the launch image.
