@@ -118,6 +118,7 @@ When an app icon is tapped on the Carplay dashboard
         id sceneUpdateTransaction = objcInvoke_2(appViewController, @"_createSceneUpdateTransactionForApplicationSceneEntity:deliveringActions:", appSceneEntity, 1);
         assertGotExpectedObject(sceneUpdateTransaction, @"SBApplicationSceneUpdateTransaction");
 
+        __block UIImageView *launchImageView = nil;
         __block NSMutableArray *transactions = getIvar(appViewController, @"_activeTransitions");
         objcInvoke_1(sceneUpdateTransaction, @"setCompletionBlock:", ^void(int arg1) {
 
@@ -132,6 +133,12 @@ When an app icon is tapped on the Carplay dashboard
             objcInvoke_1(appProcess, @"_executeBlockAfterLaunchCompletes:", ^void(void) {
                 // Ask the app to rotate to landscape
                 [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:identifier userInfo:@{@"orientation": @(3)}];
+
+                // Wait a sec then remove the splashscreen image. It should already be hidden/covered by the live app view, but it needs to be removed
+                // so it doesn't poke through if the App's orientation changes to portait
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                    [launchImageView removeFromSuperview];
+                });
             });
         });
 
@@ -165,8 +172,30 @@ When an app icon is tapped on the Carplay dashboard
 
         UIView *container = [[UIView alloc] initWithFrame:CGRectMake(40, rootWindowFrame.origin.y, rootWindowFrame.size.width - 40, rootWindowFrame.size.height)];
         [container setBackgroundColor:[UIColor clearColor]];
-        [container addSubview:objcInvoke(appViewController, @"view")];
         [rootWindow addSubview:container];
+
+        // The scene does not show a launch image, it needs to be created manually.
+        // Fetch a snapshot to use
+        id launchImageSnapshotPredicate = [[objc_getClass("XBApplicationSnapshotPredicate") alloc] init];
+        // Always starting in landscape for now
+        objcInvoke_1(launchImageSnapshotPredicate, @"setInterfaceOrientationMask:", UIInterfaceOrientationMaskLandscapeLeft);
+        objcInvoke_1(launchImageSnapshotPredicate, @"setContentTypeMask:", 6);
+
+        id launchImageSnapshotManifest = objcInvoke_1([objc_getClass("XBApplicationSnapshotManifest") alloc], @"initWithApplicationInfo:", objcInvoke(targetApp, @"info"));
+        NSString *defaultGroupID = objcInvoke(launchImageSnapshotManifest, @"defaultGroupIdentifier");
+
+        NSArray *snapshots = objcInvoke_2(launchImageSnapshotManifest, @"snapshotsForGroupID:matchingPredicate:", defaultGroupID, launchImageSnapshotPredicate);
+        id appSnapshot = [snapshots firstObject];
+        id appSnapshotImage = objcInvoke_1(appSnapshot, @"imageForInterfaceOrientation:", 1);
+
+        // Build an imageview to contain the launch image.
+        // The processLaunched handler defined above is responsible for cleaning this up
+        launchImageView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, [container frame].size.width, [container frame].size.height)];
+        [launchImageView setImage:appSnapshotImage];
+        [container addSubview:launchImageView];
+
+        // Add the live app view
+        [container addSubview:objcInvoke(appViewController, @"view")];
 
         UIView *sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, rootWindowFrame.origin.y, 40, rootWindowFrame.size.height)];
         [sidebarView setBackgroundColor:[UIColor lightGrayColor]];
@@ -241,7 +270,6 @@ Invoked when SpringBoard finishes launching
 
 %new
 - (void)sceneMonitor:(id)arg1 sceneWasDestroyed:(id)arg2{
-    NSLog(@"sceneWasDestroyed");
     objcInvoke(self, @"dismiss");
 }
 
