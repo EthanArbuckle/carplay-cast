@@ -35,14 +35,22 @@ Prevent app from dying when the device locks
 */
 %hook SBSuspendedUnderLockManager
 
+/*
+Invoked when the device is being locked while applications are running/active
+*/
 - (int)_shouldBeBackgroundUnderLockForScene:(id)arg2 withSettings:(id)arg3
 {
     BOOL shouldBackground  = %orig;
-    NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(arg2, @"client"), @"process"), @"bundleIdentifier");
-    NSArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
-    if ([lockAssertions containsObject:sceneAppBundleID] && shouldBackground)
+    if (shouldBackground)
     {
-        shouldBackground = NO;
+        // This app is going to be backgrounded, If there is an active lock-prevention assertion for it, prevent the backgrounding.
+        // This keeps CarPlay apps interactive when the device locks
+        NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(arg2, @"client"), @"process"), @"bundleIdentifier");
+        NSArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
+        if ([lockAssertions containsObject:sceneAppBundleID])
+        {
+            shouldBackground = NO;
+        }
     }
 
     return shouldBackground;
@@ -228,6 +236,7 @@ When an app icon is tapped on the Carplay dashboard
             [rootWindow setAlpha:1];
         } completion:nil];
 
+        // Add a placeholder "this app is on the carplay screen" view onto the app on the main screen
         id mainSceneLayoutController = objcInvoke(objc_getClass("SBMainDisplaySceneLayoutViewController"), @"mainDisplaySceneLayoutViewController");
         id liveAppSceneControllers = objcInvoke(mainSceneLayoutController, @"appViewControllers");
         for (id appSceneLayoutController in liveAppSceneControllers)
@@ -268,8 +277,14 @@ Invoked when SpringBoard finishes launching
 
 %hook SBAppViewController
 
+/*
+FBSceneMonitor delegate method, invoked when the app process dies. 
+Use this to close the window on the CarPlay screen if the app crashes or is killed via the App Switcher on main screen
+*/
 %new
-- (void)sceneMonitor:(id)arg1 sceneWasDestroyed:(id)arg2{
+- (void)sceneMonitor:(id)arg1 sceneWasDestroyed:(id)arg2
+{
+    // Close the window
     objcInvoke(self, @"dismiss");
 }
 
@@ -448,7 +463,7 @@ happen while the device is in a faceup/facedown orientation.
 
 /*
 Called when something is trying to change a scene's settings (including sending it to background/foreground).
-Use this to prevent the App from going to sleep when other application's are launched on the main screen.
+Use this to prevent the App from going to sleep when other applications are launched on the main screen.
 */
 - (void)updateSettings:(id)arg1 withTransitionContext:(id)arg2 completion:(void *)arg3
 {
@@ -473,6 +488,9 @@ Use this to prevent the App from going to sleep when other application's are lau
 
 %hook SBDeviceApplicationSceneView
 
+/*
+Is this a main-screen scene view for an application that is being hosted on the Carplay screen? 
+*/
 %new
 - (BOOL)isMainScreenCounterpartToLiveCarplayApp
 {
@@ -523,6 +541,11 @@ Use this to prevent the App from going to sleep when other application's are lau
     }
 }
 
+/*
+This scene view (and its background view, which the custom ui is drawn on) rotates automatically with the app's orientation changes.
+Because the app's orientation may not match the device's real orientation, this view may be layed out incorrectly for the main screen.
+Walk superviews looking for the view that handles orientation changes, and force it to match the physical device orientation
+*/
 %new
 - (void)rotateToDeviceOrientation
 {
@@ -582,6 +605,10 @@ the carplay screen, the mainscreen will show a blurred background with a label.
     objcInvoke_3(self, @"setDisplayMode:animationFactory:completion:", 1, animationFactory, nil);
 }
 
+/*
+Display mode is being changed.
+The relevant modes for this tweak are LiveContent (interactive app) and Placeholder (usually a blackscreen, but we'll pretty it up) 
+*/
 - (void)setDisplayMode:(int)arg1 animationFactory:(id)arg2 completion:(void *)arg3
 {
     BOOL isCarplayCounterpart = objcInvokeT(self, @"isMainScreenCounterpartToLiveCarplayApp", BOOL);
