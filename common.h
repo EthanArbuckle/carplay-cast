@@ -12,3 +12,9 @@
 #define objcInvoke_3(a, b, c, d, e) ((id (*)(id, SEL, typeof(c), typeof(d), typeof(e)))objc_msgSend)(a, NSSelectorFromString(b), c, d, e)
 
 #define assertGotExpectedObject(obj, type) if (!obj || ![obj isKindOfClass:NSClassFromString(type)]) [NSException raise:@"UnexpectedObjectException" format:@"Expected %@ but got %@", type, obj]
+
+static char *kPropertyKey_sceneMonitor;
+static char *kPropertyKey_carplayCADisplay;
+static char *kPropertyKey_lastKnownOrientation;
+static char *kPropertyKey_lockAssertionIdentifiers;
+static char *kPropertyKey_didDrawPlaceholder;

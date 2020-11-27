@@ -1,6 +1,14 @@
 #include "common.h"
 
 /*
+Injected into SpringBoard.
+*/
+%group SPRINGBOARD
+
+id currentlyHostedAppController = nil;
+int (*orig_BKSDisplayServicesSetScreenBlanked)(int);
+
+/*
 Find the CADisplay handling the CarPlay stuff
 */
 id getCarplayCADisplay(void)
@@ -23,18 +31,6 @@ id getCarplayCADisplay(void)
 }
 
 /*
-Injected into SpringBoard.
-*/
-%group SPRINGBOARD
-
-id currentlyHostedAppController = nil;
-id carplayExternalDisplay = nil;
-int lastOrientation = -1;
-NSMutableArray *appIdentifiersToIgnoreLockAssertions = nil;
-int (*orig_BKSDisplayServicesSetScreenBlanked)(int);
-id sceneMonitor = nil;
-
-/*
 Prevent app from dying when the device locks
 */
 %hook SBSuspendedUnderLockManager
@@ -43,7 +39,8 @@ Prevent app from dying when the device locks
 {
     BOOL shouldBackground  = %orig;
     NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(arg2, @"client"), @"process"), @"bundleIdentifier");
-    if ([appIdentifiersToIgnoreLockAssertions containsObject:sceneAppBundleID] && shouldBackground)
+    NSArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
+    if ([lockAssertions containsObject:sceneAppBundleID] && shouldBackground)
     {
         shouldBackground = NO;
     }
@@ -67,10 +64,11 @@ When an app icon is tapped on the Carplay dashboard
         id targetApp = objcInvoke_1(objcInvoke(objc_getClass("SBApplicationController"), @"sharedInstance"), @"applicationWithBundleIdentifier:", identifier);
         assertGotExpectedObject(targetApp, @"SBApplication");
 
-        carplayExternalDisplay = getCarplayCADisplay();
+        id carplayExternalDisplay = getCarplayCADisplay();
         assertGotExpectedObject(carplayExternalDisplay, @"CADisplay");
 
-        [appIdentifiersToIgnoreLockAssertions addObject:identifier];
+        NSMutableArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
+        [lockAssertions addObject:identifier];
 
         id displayConfiguration = objcInvoke_2([objc_getClass("FBSDisplayConfiguration") alloc], @"initWithCADisplay:isMainDisplay:", carplayExternalDisplay, 0);
         assertGotExpectedObject(displayConfiguration, @"FBSDisplayConfiguration");
@@ -101,6 +99,8 @@ When an app icon is tapped on the Carplay dashboard
         objcInvoke_1(appViewController, @"setIgnoresOcclusions:", 0);
         setIvar(appViewController, @"_currentMode", @(2));
         objcInvoke(getIvar(appViewController, @"_activationSettings"), @"clearActivationSettings");
+        // Store the carplay CADisplay - its frame is the source of truth for screen size during orientation changes
+        objc_setAssociatedObject(appViewController, &kPropertyKey_carplayCADisplay, carplayExternalDisplay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
         id sceneUpdateTransaction = objcInvoke_2(appViewController, @"_createSceneUpdateTransactionForApplicationSceneEntity:deliveringActions:", appSceneEntity, 1);
         assertGotExpectedObject(sceneUpdateTransaction, @"SBApplicationSceneUpdateTransaction");
@@ -142,8 +142,9 @@ When an app icon is tapped on the Carplay dashboard
 
         // Create a scene monitor to watch for the app process dying. The carplay window will dismiss itself
         NSString *sceneID = objcInvoke_1(sceneLayoutManager, @"primarySceneIdentifierForBundleIdentifier:", identifier);
-        sceneMonitor = objcInvoke_1([objc_getClass("FBSceneMonitor") alloc], @"initWithSceneID:", sceneID);
+        id sceneMonitor = objcInvoke_1([objc_getClass("FBSceneMonitor") alloc], @"initWithSceneID:", sceneID);
         [sceneMonitor setDelegate:appViewController];
+        objc_setAssociatedObject(appViewController, &kPropertyKey_sceneMonitor, sceneMonitor, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
         UIWindow *rootWindow = objcInvoke_1([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
         CGRect rootWindowFrame = [rootWindow frame];
@@ -255,7 +256,9 @@ Invoked when SpringBoard finishes launching
 {
     // Setup to receive App Launch notifications from the CarPlay process
     [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserver:self selector:NSSelectorFromString(@"handleCarPlayLaunchNotification:") name:@"com.ethanarbuckle.carplayenable" object:nil];
-    appIdentifiersToIgnoreLockAssertions = [[NSMutableArray alloc] init];
+
+    NSMutableArray *appIdentifiersToIgnoreLockAssertions = [[NSMutableArray alloc] init];
+    objc_setAssociatedObject(self, &kPropertyKey_lockAssertionIdentifiers, appIdentifiersToIgnoreLockAssertions, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     %orig;
 }
@@ -276,7 +279,10 @@ When a CarPlay App is closed
 %new
 - (void)dismiss
 {
+    // Invalidate the scene monitor
+    id sceneMonitor = objc_getAssociatedObject(currentlyHostedAppController, &kPropertyKey_sceneMonitor);
     [sceneMonitor invalidate];
+
     currentlyHostedAppController = nil;
     __block id rootWindow = [[[self view] superview] superview];
 
@@ -306,11 +312,12 @@ When a CarPlay App is closed
         id sharedApp = [UIApplication sharedApplication];
 
         // After the scene returns to the device, release the assertion that prevents suspension
+        NSMutableArray *lockAssertions = objc_getAssociatedObject(sharedApp, &kPropertyKey_lockAssertionIdentifiers);
         id appScene = objcInvoke(objcInvoke(self, @"sceneHandle"), @"sceneIfExists");
         if (appScene != nil)
         {
             NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
-            [appIdentifiersToIgnoreLockAssertions removeObject:sceneAppBundleID];
+            [lockAssertions removeObject:sceneAppBundleID];
 
             // Send the app to the background *if it is not on the main screen*
             id frontmostApp = objcInvoke(sharedApp, @"_accessibilityFrontMostApplication");
@@ -331,8 +338,6 @@ When a CarPlay App is closed
         }
 
         rootWindow = nil;
-
-        lastOrientation = resetOrientationLock;
         // todo: resign first responder (kb causes glitches on return)
     };
 
@@ -351,8 +356,9 @@ When the "rotate orientation" button is pressed on a CarplayEnabled app window
 %new
 - (void)handleRotate
 {
-    BOOL wasLandscape = lastOrientation >= 3;
-    int desiredOrientation = (wasLandscape) ? 1 : 3;
+    id _lastOrientation = objc_getAssociatedObject(self, &kPropertyKey_lastKnownOrientation);
+    int lastOrientation = (_lastOrientation) ? [_lastOrientation intValue] : -1;
+    int desiredOrientation = (UIInterfaceOrientationIsLandscape(lastOrientation)) ? 1 : 3;
 
     id appScene = objcInvoke(objcInvoke(currentlyHostedAppController, @"sceneHandle"), @"sceneIfExists");
     NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
@@ -367,18 +373,20 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
 %new
 - (void)resizeHostedAppForCarplayDisplay:(int)desiredOrientation
 {
+    id _lastOrientation = objc_getAssociatedObject(self, &kPropertyKey_lastKnownOrientation);
+    int lastOrientation = (_lastOrientation) ? [_lastOrientation intValue] : -1;
     if (desiredOrientation == lastOrientation)
     {
         return;
     }
-    lastOrientation = desiredOrientation;
 
     id appSceneView = getIvar(getIvar(self, @"_deviceAppViewController"), @"_sceneView");
     assertGotExpectedObject(appSceneView, @"SBSceneView");
 
     UIView *hostingContentView = getIvar(appSceneView, @"_sceneContentContainerView");
 
-    CGRect displayFrame = objcInvokeT(carplayExternalDisplay, @"frame", CGRect);
+    id carplayDisplay = objc_getAssociatedObject(self, &kPropertyKey_carplayCADisplay);
+    CGRect displayFrame = objcInvokeT(carplayDisplay, @"frame", CGRect);
 
     CGSize carplayDisplaySize = CGSizeMake(displayFrame.size.width - 80, displayFrame.size.height);
     CGSize mainScreenSize = [[UIScreen mainScreen] bounds].size;
@@ -409,6 +417,9 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
     [hostingContentView setTransform:CGAffineTransformMakeScale(widthScale, heightScale)];
     CGRect frame = [[self view] frame];
     [[self view] setFrame:CGRectMake(xOrigin, frame.origin.y, carplayDisplaySize.width, carplayDisplaySize.height)];
+
+    // Update last known orientation
+    objc_setAssociatedObject(self, &kPropertyKey_lastKnownOrientation, @(desiredOrientation), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 %end
@@ -444,7 +455,8 @@ Use this to prevent the App from going to sleep when other application's are lau
     id sceneClient = objcInvoke(self, @"client");
     if ([sceneClient respondsToSelector:NSSelectorFromString(@"process")]) {
         NSString *sceneAppBundleID = objcInvoke(objcInvoke(sceneClient, @"process"), @"bundleIdentifier");
-        if ([appIdentifiersToIgnoreLockAssertions containsObject:sceneAppBundleID])
+        NSArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
+        if ([lockAssertions containsObject:sceneAppBundleID])
         {
             if (objcInvokeT(arg1, @"isForeground", BOOL) == NO)
             {
@@ -460,8 +472,6 @@ Use this to prevent the App from going to sleep when other application's are lau
 
 
 %hook SBDeviceApplicationSceneView
-
-static char *kCarplayPlaceholderDrawnKey;
 
 %new
 - (BOOL)isMainScreenCounterpartToLiveCarplayApp
@@ -547,11 +557,11 @@ the carplay screen, the mainscreen will show a blurred background with a label.
 {
     // The background view may have already been drawn on. Use an associated object to determine if its already been handled
     UIView *backgroundView = objcInvoke(self, @"backgroundView");
-    id hasDrawn = objc_getAssociatedObject(backgroundView, &kCarplayPlaceholderDrawnKey);
+    id hasDrawn = objc_getAssociatedObject(backgroundView, &kPropertyKey_didDrawPlaceholder);
     if (!hasDrawn)
     {
         // Not yet drawn. Set associated object to avoid redrawing
-        objc_setAssociatedObject(backgroundView, &kCarplayPlaceholderDrawnKey, @(1), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(backgroundView, &kPropertyKey_didDrawPlaceholder, @(1), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
         // [[UIScreen mainscreen] bounds] may not be using the correct orientation. Get screen bounds for explicit orientation
         int deviceOrientation = [[UIDevice currentDevice] orientation];
@@ -620,9 +630,10 @@ int hook_BKSDisplayServicesSetScreenBlanked(int arg1)
     if (arg1 == 1 && currentlyHostedAppController != nil)
     {
         // The device's screen is turning off while an app is hosted on the carplay display
+        NSArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
         id appScene = objcInvoke(objcInvoke(currentlyHostedAppController, @"sceneHandle"), @"sceneIfExists");
         NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
-        if ([appIdentifiersToIgnoreLockAssertions containsObject:sceneAppBundleID])
+        if ([lockAssertions containsObject:sceneAppBundleID])
         {
             // Turn the screen off as originally intended
             orig_BKSDisplayServicesSetScreenBlanked(1);
