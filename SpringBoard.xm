@@ -578,16 +578,30 @@ the carplay screen, the mainscreen will show a blurred background with a label.
 %new
 - (void)drawCarplayPlaceholder
 {
-    // The background view may have already been drawn on. Use an associated object to determine if its already been handled
+    int deviceOrientation = [[UIDevice currentDevice] orientation];
+    // The background view may have already been drawn on. Use an associated object to determine if its already been handled for this orientation
+    // If it was drawn for a different orientation, start fresh
     UIView *backgroundView = objcInvoke(self, @"backgroundView");
-    id hasDrawn = objc_getAssociatedObject(backgroundView, &kPropertyKey_didDrawPlaceholder);
-    if (!hasDrawn)
+    id _drawnForOrientation = objc_getAssociatedObject(backgroundView, &kPropertyKey_didDrawPlaceholder);
+    int drawnForOrientation = (_drawnForOrientation) ? [_drawnForOrientation intValue] : -1;
+    if (drawnForOrientation != deviceOrientation)
     {
-        // Not yet drawn. Set associated object to avoid redrawing
-        objc_setAssociatedObject(backgroundView, &kPropertyKey_didDrawPlaceholder, @(1), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        // Needs to be created. If it was already made, remove the label subview
+        if (drawnForOrientation > 0)
+        {
+            for (UIView *subview in [backgroundView subviews])
+            {
+                if ([subview isKindOfClass:objc_getClass("UILabel")])
+                {
+                    [subview removeFromSuperview];
+                }
+            }
+        }
+
+        // Set associated object to avoid redrawing if no orientation changes have happened
+        objc_setAssociatedObject(backgroundView, &kPropertyKey_didDrawPlaceholder, @(deviceOrientation), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
         // [[UIScreen mainscreen] bounds] may not be using the correct orientation. Get screen bounds for explicit orientation
-        int deviceOrientation = [[UIDevice currentDevice] orientation];
         CGRect screenBounds = ((CGRect (*)(id, SEL, int))objc_msgSend)([UIScreen mainScreen], NSSelectorFromString(@"boundsForOrientation:"), deviceOrientation);
 
         UILabel *hostedOnCarplayLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 300, screenBounds.size.width, 50)];
@@ -597,6 +611,7 @@ the carplay screen, the mainscreen will show a blurred background with a label.
         [hostedOnCarplayLabel setCenter:[backgroundView center]];
         [backgroundView addSubview:hostedOnCarplayLabel];
     }
+
     // Wallpaper style to a nice blur
     objcInvoke_1(backgroundView, @"setWallpaperStyle:", 18);
 
