@@ -124,14 +124,14 @@ When an app icon is tapped on the Carplay dashboard
             assertGotExpectedObject(appProcess, @"FBProcess");
 
             objcInvoke_1(appProcess, @"_executeBlockAfterLaunchCompletes:", ^void(void) {
-                // Ask the app to rotate to landscape
-                [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:identifier userInfo:@{@"orientation": @(3)}];
-
                 // Wait a sec then remove the splashscreen image. It should already be hidden/covered by the live app view, but it needs to be removed
                 // so it doesn't poke through if the App's orientation changes to portait
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                     [launchImageView removeFromSuperview];
                 });
+
+                // Ask the app to rotate to landscape
+                [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:identifier userInfo:@{@"orientation": @(3)}];
             });
         });
 
