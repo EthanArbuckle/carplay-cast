@@ -107,8 +107,6 @@ When an app icon is tapped on the Carplay dashboard
         objcInvoke_1(appViewController, @"setIgnoresOcclusions:", 0);
         setIvar(appViewController, @"_currentMode", @(2));
         objcInvoke(getIvar(appViewController, @"_activationSettings"), @"clearActivationSettings");
-        // Store the carplay CADisplay - its frame is the source of truth for screen size during orientation changes
-        objc_setAssociatedObject(appViewController, &kPropertyKey_carplayCADisplay, carplayExternalDisplay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
         id sceneUpdateTransaction = objcInvoke_2(appViewController, @"_createSceneUpdateTransactionForApplicationSceneEntity:deliveringActions:", appSceneEntity, 1);
         assertGotExpectedObject(sceneUpdateTransaction, @"SBApplicationSceneUpdateTransaction");
@@ -278,7 +276,7 @@ Invoked when SpringBoard finishes launching
 %hook SBAppViewController
 
 /*
-FBSceneMonitor delegate method, invoked when the app process dies. 
+FBSceneMonitor delegate method, invoked when the app process dies.
 Use this to close the window on the CarPlay screen if the app crashes or is killed via the App Switcher on main screen
 */
 %new
@@ -397,41 +395,36 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
 
     id appSceneView = getIvar(getIvar(self, @"_deviceAppViewController"), @"_sceneView");
     assertGotExpectedObject(appSceneView, @"SBSceneView");
-
     UIView *hostingContentView = getIvar(appSceneView, @"_sceneContentContainerView");
 
-    id carplayDisplay = objc_getAssociatedObject(self, &kPropertyKey_carplayCADisplay);
-    CGRect displayFrame = objcInvokeT(carplayDisplay, @"frame", CGRect);
+    UIScreen *carplayScreen = [[UIScreen screens] lastObject];
+    if (objcInvokeT(carplayScreen, @"_isCarScreen", BOOL) == NO)
+    {
+        return;
+    }
+    CGRect carplayDisplayBounds = [carplayScreen bounds];
+    CGSize carplayDisplaySize = CGSizeMake(carplayDisplayBounds.size.width - 40, carplayDisplayBounds.size.height);
 
-    CGSize carplayDisplaySize = CGSizeMake(displayFrame.size.width - 80, displayFrame.size.height);
-    CGSize mainScreenSize = [[UIScreen mainScreen] bounds].size;
-
-    CGFloat widthScale;
-    CGFloat heightScale;
-    CGFloat xOrigin;
+    CGSize mainScreenSize = ((CGRect (*)(id, SEL, int))objc_msgSend)([UIScreen mainScreen], NSSelectorFromString(@"boundsForOrientation:"), desiredOrientation).size;
 
     id rootWindow = [[[self view] superview] superview];
 
-    if (desiredOrientation == 1 || desiredOrientation == 2)
+    CGFloat widthScale = carplayDisplaySize.width / mainScreenSize.width;
+    CGFloat heightScale = carplayDisplaySize.height / mainScreenSize.height;
+    CGFloat xOrigin = [rootWindow frame].origin.x;
+
+    // Special scaling when in portrait mode (because the carplay screen is always physically landscape)
+    if (UIInterfaceOrientationIsPortrait(desiredOrientation))
     {
-        // half width, full height
-        CGSize adjustedMainSize = CGSizeMake(MIN(mainScreenSize.width, mainScreenSize.height), MAX(mainScreenSize.width, mainScreenSize.height));
-        widthScale = (carplayDisplaySize.width / 1.5) / (adjustedMainSize.width * 2);
-        heightScale = carplayDisplaySize.height / (adjustedMainSize.height * 2);
-        xOrigin = (([rootWindow frame].size.width * widthScale) / 4) + [rootWindow frame].origin.x;
-    }
-    else
-    {
-        // full width and height
-        CGSize adjustedMainSize = CGSizeMake(MAX(mainScreenSize.width, mainScreenSize.height), MIN(mainScreenSize.width, mainScreenSize.height));
-        widthScale = carplayDisplaySize.width / (adjustedMainSize.width * 2);
-        heightScale = carplayDisplaySize.height / (adjustedMainSize.height * 2);
-        xOrigin = [rootWindow frame].origin.x;
+        // Use half the display's width
+        widthScale = (carplayDisplaySize.width / 2) / mainScreenSize.width;
+        // Center it
+        CGFloat scaledDisplayWidth = carplayDisplaySize.width * widthScale;
+        xOrigin = (carplayDisplaySize.width / 2) - (scaledDisplayWidth / 2);
     }
 
     [hostingContentView setTransform:CGAffineTransformMakeScale(widthScale, heightScale)];
-    CGRect frame = [[self view] frame];
-    [[self view] setFrame:CGRectMake(xOrigin, frame.origin.y, carplayDisplaySize.width, carplayDisplaySize.height)];
+    [[self view] setFrame:CGRectMake(xOrigin, [[self view] frame].origin.y, carplayDisplaySize.width, carplayDisplaySize.height)];
 
     // Update last known orientation
     objc_setAssociatedObject(self, &kPropertyKey_lastKnownOrientation, @(desiredOrientation), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -489,7 +482,7 @@ Use this to prevent the App from going to sleep when other applications are laun
 %hook SBDeviceApplicationSceneView
 
 /*
-Is this a main-screen scene view for an application that is being hosted on the Carplay screen? 
+Is this a main-screen scene view for an application that is being hosted on the Carplay screen?
 */
 %new
 - (BOOL)isMainScreenCounterpartToLiveCarplayApp
@@ -622,7 +615,7 @@ the carplay screen, the mainscreen will show a blurred background with a label.
 
 /*
 Display mode is being changed.
-The relevant modes for this tweak are LiveContent (interactive app) and Placeholder (usually a blackscreen, but we'll pretty it up) 
+The relevant modes for this tweak are LiveContent (interactive app) and Placeholder (usually a blackscreen, but we'll pretty it up)
 */
 - (void)setDisplayMode:(int)arg1 animationFactory:(id)arg2 completion:(void *)arg3
 {
