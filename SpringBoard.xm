@@ -66,7 +66,7 @@ When an app icon is tapped on the Carplay dashboard
 %new
 - (void)handleCarPlayLaunchNotification:(id)notification
 {
-    @try
+   @try
     {
         NSString *identifier = [notification userInfo][@"identifier"];
         id targetApp = objcInvoke_1(objcInvoke(objc_getClass("SBApplicationController"), @"sharedInstance"), @"applicationWithBundleIdentifier:", identifier);
@@ -112,6 +112,8 @@ When an app icon is tapped on the Carplay dashboard
         assertGotExpectedObject(sceneUpdateTransaction, @"SBApplicationSceneUpdateTransaction");
 
         __block UIImageView *launchImageView = nil;
+        __block BOOL shouldTakeSnapshot = NO;
+
         __block NSMutableArray *transactions = getIvar(appViewController, @"_activeTransitions");
         objcInvoke_1(sceneUpdateTransaction, @"setCompletionBlock:", ^void(int arg1) {
 
@@ -128,6 +130,20 @@ When an app icon is tapped on the Carplay dashboard
                 // so it doesn't poke through if the App's orientation changes to portait
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                     [launchImageView removeFromSuperview];
+
+                    if (shouldTakeSnapshot)
+                    {
+                        // Now that the app is launched and presumably in landscape mode, save a snapshot.
+                        // If an app does not natively support landscape mode and doesn't ship a landscape launch image, this snapshot can be used during cold-launches
+                        id appScene = objcInvoke(sceneHandle, @"scene");
+                        id sceneSettings = objcInvoke(appScene, @"mutableSettings");
+                        objcInvoke_1(sceneSettings, @"setInterfaceOrientation:", 3);
+                        id snapshotContext = objcInvoke_2(objc_getClass("FBSSceneSnapshotContext"), @"contextWithSceneID:settings:", objcInvoke(appScene, @"identifier"), sceneSettings);
+                        objcInvoke_1(snapshotContext, @"setName:", @"CarPlayLaunchImage");
+                        objcInvoke_1(snapshotContext, @"setScale:", 2);
+                        objcInvoke_1(snapshotContext, @"setExpirationInterval:", 99999);
+                        objcInvoke_3(targetApp, @"saveSnapshotForSceneHandle:context:completion:", sceneHandle, snapshotContext, nil);
+                    }
                 });
 
                 // Ask the app to rotate to landscape
@@ -146,7 +162,8 @@ When an app icon is tapped on the Carplay dashboard
         objcInvoke_3(appView, @"setDisplayMode:animationFactory:completion:", 4, animationFactory, 0);
         [[appViewController view] setBackgroundColor:[UIColor clearColor]];
 
-        // Create a scene monitor to watch for the app process dying. The carplay window will dismiss itself
+        // Create a scene monitor to watch for the app process dying. The carplay window will dismiss itself.
+        // todo: this returns nil if the app process isn't running..
         NSString *sceneID = objcInvoke_1(sceneLayoutManager, @"primarySceneIdentifierForBundleIdentifier:", identifier);
         id sceneMonitor = objcInvoke_1([objc_getClass("FBSceneMonitor") alloc], @"initWithSceneID:", sceneID);
         [sceneMonitor setDelegate:appViewController];
@@ -171,24 +188,48 @@ When an app icon is tapped on the Carplay dashboard
         // The scene does not show a launch image, it needs to be created manually.
         // Fetch a snapshot to use
         id launchImageSnapshotManifest = objcInvoke_1([objc_getClass("XBApplicationSnapshotManifest") alloc], @"initWithApplicationInfo:", objcInvoke(targetApp, @"info"));
-        NSString *defaultGroupID = objcInvoke(launchImageSnapshotManifest, @"defaultGroupIdentifier");
         // There's a few variants of snapshots offered: portait/landscape, dark/light.
         // For now just try to find a landscape snapshot. If no landscape, fallback to portait.
-        // TODO: generate a landscape snapshot after first carplay launch to use on next cold-launch
-        NSArray *snapshots = objcInvoke_1(launchImageSnapshotManifest, @"snapshotsForGroupID:", defaultGroupID);
         id appSnapshot = nil;
-        for (id snapshotCandidate in snapshots)
+        for (id snapshotGroup in objcInvoke(launchImageSnapshotManifest, @"_allSnapshotGroups"))
         {
-            int snapshotOrientation = objcInvokeT(snapshotCandidate, @"interfaceOrientation", int);
-            if (UIInterfaceOrientationIsLandscape(snapshotOrientation))
+            for (id snapshotCandidate in objcInvoke(snapshotGroup, @"snapshots"))
             {
-                // Prefer a landscape image, but not all apps will have one available
-                appSnapshot = snapshotCandidate;
-                break;
+                int snapshotOrientation = objcInvokeT(snapshotCandidate, @"interfaceOrientation", int);
+                int snapshotContentType = objcInvokeT(snapshotCandidate, @"contentType", int);
+                if (UIInterfaceOrientationIsLandscape(snapshotOrientation))
+                {
+                    BOOL isSceneContent = snapshotContentType == 0;
+                    if (!appSnapshot && isSceneContent)
+                    {
+                        if ([objcInvoke(snapshotCandidate, @"name") isEqualToString:@"CarPlayLaunchImage"])
+                        {
+                            appSnapshot = snapshotCandidate;
+                            NSLog(@"using scene content for now %@", snapshotCandidate);
+                            break;
+                        }
+                    }
+
+                    BOOL isStaticOrGeneratedImage = (snapshotContentType == 1 || snapshotContentType == 2);
+                    if (isStaticOrGeneratedImage)
+                    {
+                        NSLog(@"using native landscape %@", snapshotCandidate);
+                        appSnapshot = snapshotCandidate;
+                        break;
+                    }
+                }
+
+                // Portait, but better than nothing
+                if (!appSnapshot)
+                {
+                    appSnapshot = snapshotCandidate;
+                }
             }
-            // Not landscape but better than nothing
-            appSnapshot = snapshotCandidate;
         }
+        // If no landscape image was found, queue up a snapshot once the app launches
+        NSLog(@"final %d, %@", objcInvokeT(appSnapshot, @"interfaceOrientation", int), appSnapshot);
+        shouldTakeSnapshot = UIInterfaceOrientationIsPortrait(objcInvokeT(appSnapshot, @"interfaceOrientation", int));
+
         // Get the image from the chosen snapshot
         id appSnapshotImage = objcInvoke_1(appSnapshot, @"imageForInterfaceOrientation:", 1);
 
@@ -196,6 +237,7 @@ When an app icon is tapped on the Carplay dashboard
         // The processLaunched handler defined above is responsible for cleaning this up
         launchImageView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, [container frame].size.width, [container frame].size.height)];
         [launchImageView setImage:appSnapshotImage];
+        [launchImageView setContentMode:UIViewContentModeScaleToFill];
         [container addSubview:launchImageView];
 
         // Add the live app view
