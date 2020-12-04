@@ -15,5 +15,8 @@
 
 static char *kPropertyKey_sceneMonitor;
 static char *kPropertyKey_lastKnownOrientation;
+static char *kPropertyKey_isFullscreen;
 static char *kPropertyKey_lockAssertionIdentifiers;
 static char *kPropertyKey_didDrawPlaceholder;
+
+#define CARPLAY_DOCK_WIDTH 40

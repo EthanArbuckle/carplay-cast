@@ -6,6 +6,7 @@ Injected into SpringBoard.
 %group SPRINGBOARD
 
 id currentlyHostedAppController = nil;
+UIView *carplayDock = nil;
 int (*orig_BKSDisplayServicesSetScreenBlanked)(int);
 
 /*
@@ -243,9 +244,9 @@ When an app icon is tapped on the Carplay dashboard
         // Add the live app view
         [container addSubview:objcInvoke(appViewController, @"view")];
 
-        UIView *sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, rootWindowFrame.origin.y, 40, rootWindowFrame.size.height)];
-        [sidebarView setBackgroundColor:[UIColor lightGrayColor]];
-        [rootWindow addSubview:sidebarView];
+        carplayDock = [[UIView alloc] initWithFrame:CGRectMake(0, rootWindowFrame.origin.y, 40, rootWindowFrame.size.height)];
+        [carplayDock setBackgroundColor:[UIColor lightGrayColor]];
+        [rootWindow addSubview:carplayDock];
 
         id imageConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:40];
 
@@ -254,16 +255,23 @@ When an app icon is tapped on the Carplay dashboard
         [closeButton addTarget:appViewController action:@selector(dismiss) forControlEvents:UIControlEventTouchUpInside];
         [closeButton setFrame:CGRectMake(0, 10, 35.0, 35.0)];
         [closeButton setTintColor:[UIColor blackColor]];
-        [sidebarView addSubview:closeButton];
+        [carplayDock addSubview:closeButton];
 
         UIButton *rotateButton = [UIButton buttonWithType:UIButtonTypeCustom];
         [rotateButton setImage:[UIImage systemImageNamed:@"rotate.right" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
         [rotateButton addTarget:appViewController action:@selector(handleRotate) forControlEvents:UIControlEventTouchUpInside];
         [rotateButton setFrame:CGRectMake(0, rootWindowFrame.size.height - 45, 35.0, 35.0)];
         [rotateButton setTintColor:[UIColor blackColor]];
-        [sidebarView addSubview:rotateButton];
+        [carplayDock addSubview:rotateButton];
 
-        objcInvoke_1(appViewController, @"resizeHostedAppForCarplayDisplay:", 3);
+        UIButton *fullscreenButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        [fullscreenButton setImage:[UIImage systemImageNamed:@"rotate.right" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
+        [fullscreenButton addTarget:appViewController action:@selector(fullscreenButton) forControlEvents:UIControlEventTouchUpInside];
+        [fullscreenButton setFrame:CGRectMake(0, rootWindowFrame.size.height - 100, 35.0, 35.0)];
+        [fullscreenButton setTintColor:[UIColor blackColor]];
+        [carplayDock addSubview:fullscreenButton];
+
+        objcInvoke_2(appViewController, @"resizeHostedAppForCarplayDisplay:isFullscreen:", 3, 0);
         [rootWindow setAlpha:0];
         [rootWindow setHidden:0];
 
@@ -326,6 +334,43 @@ Use this to close the window on the CarPlay screen if the app crashes or is kill
 {
     // Close the window
     objcInvoke(self, @"dismiss");
+}
+
+%new
+- (void)test:(UITapGestureRecognizer *)sender
+{
+    [[sender view] removeFromSuperview];
+    BOOL toFullScreen = 0;
+    id _lastOrientation = objc_getAssociatedObject(self, &kPropertyKey_lastKnownOrientation);
+    int lastOrientation = (_lastOrientation) ? [_lastOrientation intValue] : 3;
+    objcInvoke_2(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:isFullscreen:", lastOrientation, toFullScreen);
+}
+
+%new
+- (void)fullscreenButton
+{
+    id _lastOrientation = objc_getAssociatedObject(self, &kPropertyKey_lastKnownOrientation);
+    int lastOrientation = (_lastOrientation) ? [_lastOrientation intValue] : 3;
+
+    // Only need fullscreen when in landscape
+    if (UIInterfaceOrientationIsPortrait(lastOrientation))
+    {
+        return;
+    }
+
+    BOOL toFullScreen = 1;
+
+    UIWindow *rootWindow = [[self view] window];
+
+    UIView *exitFullscreenView = [[UIView alloc] initWithFrame:[rootWindow frame]];
+    [exitFullscreenView setBackgroundColor:[UIColor whiteColor]];
+    [exitFullscreenView setAlpha:0.05];
+    UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(test:)];
+    [exitFullscreenView addGestureRecognizer:tapGesture];
+    [exitFullscreenView setUserInteractionEnabled:YES];
+    [rootWindow addSubview:exitFullscreenView];
+
+    objcInvoke_2(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:isFullscreen:", lastOrientation, toFullScreen);
 }
 
 /*
@@ -415,22 +460,29 @@ When the "rotate orientation" button is pressed on a CarplayEnabled app window
     int lastOrientation = (_lastOrientation) ? [_lastOrientation intValue] : -1;
     int desiredOrientation = (UIInterfaceOrientationIsLandscape(lastOrientation)) ? 1 : 3;
 
+    id _isFullscreen = objc_getAssociatedObject(self, &kPropertyKey_isFullscreen);
+    BOOL isCurrentlyFullscreen = (_isFullscreen) ? [_isFullscreen boolValue] : NO;
+
     id appScene = objcInvoke(objcInvoke(currentlyHostedAppController, @"sceneHandle"), @"sceneIfExists");
     NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
 
     [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:sceneAppBundleID userInfo:@{@"orientation": @(desiredOrientation)}];
-    objcInvoke_1(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:", desiredOrientation);
+    objcInvoke_2(currentlyHostedAppController, @"resizeHostedAppForCarplayDisplay:isFullscreen:", desiredOrientation, isCurrentlyFullscreen);
 }
 
 /*
 Handle resizing the Carplay App window. Called anytime the app orientation changes (including first appearance)
 */
 %new
-- (void)resizeHostedAppForCarplayDisplay:(int)desiredOrientation
+- (void)resizeHostedAppForCarplayDisplay:(int)desiredOrientation isFullscreen:(BOOL)fullscreen
 {
     id _lastOrientation = objc_getAssociatedObject(self, &kPropertyKey_lastKnownOrientation);
     int lastOrientation = (_lastOrientation) ? [_lastOrientation intValue] : -1;
-    if (desiredOrientation == lastOrientation)
+
+    id _isFullscreen = objc_getAssociatedObject(self, &kPropertyKey_isFullscreen);
+    BOOL isCurrentlyFullscreen = (_isFullscreen) ? [_isFullscreen boolValue] : NO;
+
+    if (desiredOrientation == lastOrientation && isCurrentlyFullscreen == fullscreen)
     {
         return;
     }
@@ -445,7 +497,8 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
         return;
     }
     CGRect carplayDisplayBounds = [carplayScreen bounds];
-    CGSize carplayDisplaySize = CGSizeMake(carplayDisplayBounds.size.width - 40, carplayDisplayBounds.size.height);
+    CGFloat dockWidth = (fullscreen) ? 0 : CARPLAY_DOCK_WIDTH;
+    CGSize carplayDisplaySize = CGSizeMake(carplayDisplayBounds.size.width - dockWidth, carplayDisplayBounds.size.height);
 
     CGSize mainScreenSize = ((CGRect (*)(id, SEL, int))objc_msgSend)([UIScreen mainScreen], NSSelectorFromString(@"boundsForOrientation:"), desiredOrientation).size;
 
@@ -468,8 +521,17 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
     [hostingContentView setTransform:CGAffineTransformMakeScale(widthScale, heightScale)];
     [[self view] setFrame:CGRectMake(xOrigin, [[self view] frame].origin.y, carplayDisplaySize.width, carplayDisplaySize.height)];
 
-    // Update last known orientation
+    // TODO: improve
+    UIView *containingView = [[self view] superview];
+    CGRect containingViewFrame = [containingView frame];
+    containingViewFrame.origin.x = dockWidth;
+    [containingView setFrame:containingViewFrame];
+
+    [carplayDock setHidden:fullscreen];
+
+    // Update last known orientation and fullscreen status
     objc_setAssociatedObject(self, &kPropertyKey_lastKnownOrientation, @(desiredOrientation), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, &kPropertyKey_isFullscreen, @(fullscreen), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 %end

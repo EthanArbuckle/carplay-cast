@@ -89,6 +89,7 @@ Make the CarPlay dashboard show 5 columns of apps instead of 4
 */
 - (void)setNumberOfPortraitColumns:(int)arg1
 {
+    // TODO: changes depending on radio screen size
     %orig(5);
 }
 
