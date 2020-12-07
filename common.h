@@ -1,4 +1,5 @@
 #include <Foundation/Foundation.h>
+#include <UIKit/UIKit.h>
 #include <objc/message.h>
 #include <dlfcn.h>
 
@@ -13,10 +14,9 @@
 
 #define assertGotExpectedObject(obj, type) if (!obj || ![obj isKindOfClass:NSClassFromString(type)]) [NSException raise:@"UnexpectedObjectException" format:@"Expected %@ but got %@", type, obj]
 
-static char *kPropertyKey_sceneMonitor;
-static char *kPropertyKey_lastKnownOrientation;
-static char *kPropertyKey_isFullscreen;
-static char *kPropertyKey_lockAssertionIdentifiers;
+#define kPropertyKey_lockAssertionIdentifiers *NSSelectorFromString(@"lockAssertions")
 static char *kPropertyKey_didDrawPlaceholder;
 
 #define CARPLAY_DOCK_WIDTH 40
+
+extern int (*orig_BKSDisplayServicesSetScreenBlanked)(int);
