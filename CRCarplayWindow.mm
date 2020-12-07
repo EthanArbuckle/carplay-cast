@@ -274,7 +274,7 @@ id getCarplayCADisplay(void)
     // todo: this returns nil if the app process isn't running..
     NSString *sceneID = objcInvoke_1(sceneLayoutManager, @"primarySceneIdentifierForBundleIdentifier:", appIdentifier);
     self.sceneMonitor = objcInvoke_1([objc_getClass("FBSceneMonitor") alloc], @"initWithSceneID:", sceneID);
-    [self.sceneMonitor setDelegate:self];
+    objcInvoke_1(self.sceneMonitor, @"setDelegate:", self);
 }
 
 /*

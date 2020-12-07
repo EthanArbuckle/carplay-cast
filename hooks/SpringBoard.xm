@@ -118,7 +118,7 @@ Use this to prevent the App from going to sleep when other applications are laun
 
 %end
 
-%hook SBDevice1ApplicationSceneView
+%hook SBDeviceApplicationSceneView
 
 /*
 Is this a main-screen scene view for an application that is being hosted on the Carplay screen?
