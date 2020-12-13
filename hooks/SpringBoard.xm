@@ -28,6 +28,7 @@ Invoked when the device is being locked while applications are running/active
         NSArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
         if ([lockAssertions containsObject:sceneAppBundleID])
         {
+            LOG_LIFECYCLE_EVENT;
             shouldBackground = NO;
         }
     }
@@ -45,7 +46,8 @@ When an app icon is tapped on the Carplay dashboard
 %new
 - (void)handleCarPlayLaunchNotification:(id)notification
 {
-   @try
+    LOG_LIFECYCLE_EVENT;
+    @try
     {
         NSString *identifier = [notification userInfo][@"identifier"];
         currentLiveCarplayWindow = [[CRCarPlayWindow alloc] initWithBundleIdentifier:identifier];
@@ -61,6 +63,7 @@ Invoked when SpringBoard finishes launching
 */
 - (void)applicationDidFinishLaunching:(id)arg1
 {
+    LOG_LIFECYCLE_EVENT;
     // Setup to receive App Launch notifications from the CarPlay process
     [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserver:self selector:NSSelectorFromString(@"handleCarPlayLaunchNotification:") name:@"com.ethanarbuckle.carplayenable" object:nil];
 
@@ -133,9 +136,10 @@ Is this a main-screen scene view for an application that is being hosted on the 
         id carplaySceneHandle = objcInvoke(liveAppViewController, @"sceneHandle");
         if ([currentSceneHandle isEqual:carplaySceneHandle])
         {
+            LOG_LIFECYCLE_EVENT;
             id carplayAppViewController = getIvar(liveAppViewController, @"_deviceAppViewController");
             id carplayAppSceneView = objcInvoke(carplayAppViewController, @"_sceneView");
-            return [self isEqual:carplayAppSceneView] == NO;
+            return carplayAppSceneView && [self isEqual:carplayAppSceneView] == NO;
         }
     }
 
@@ -148,6 +152,7 @@ Is this a main-screen scene view for an application that is being hosted on the 
     BOOL isCarplayCounterpart = objcInvokeT(self, @"isMainScreenCounterpartToLiveCarplayApp", BOOL);
     if (isCarplayCounterpart)
     {
+        LOG_LIFECYCLE_EVENT;
         int currentDisplayMode = objcInvokeT(self, @"displayMode", int);
         BOOL isHostingAnApp = currentDisplayMode == 4;
         if (isHostingAnApp)
@@ -211,6 +216,7 @@ the carplay screen, the mainscreen will show a blurred background with a label.
 %new
 - (void)drawCarplayPlaceholder
 {
+    LOG_LIFECYCLE_EVENT;
     int deviceOrientation = [[UIDevice currentDevice] orientation];
     // The background view may have already been drawn on. Use an associated object to determine if its already been handled for this orientation
     // If it was drawn for a different orientation, start fresh
@@ -263,6 +269,7 @@ The relevant modes for this tweak are LiveContent (interactive app) and Placehol
     BOOL requestingLiveContent = arg1 == 4;
     if (requestingLiveContent && isCarplayCounterpart)
     {
+        LOG_LIFECYCLE_EVENT;
         // An app is being opened on the mainscreen while already running on the carplay screen.
         // Force the display mode to Placeholder instead of LiveContent
         %orig(1, arg2, arg3);
@@ -304,22 +311,27 @@ int hook_BKSDisplayServicesSetScreenBlanked(int arg1)
 {
     if (arg1 == 1 && currentLiveCarplayWindow != nil)
     {
+        LOG_LIFECYCLE_EVENT;
         // The device's screen is turning off while an app is hosted on the carplay display
         NSArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
 
-        id appScene = objcInvoke(objcInvoke([currentLiveCarplayWindow appViewController], @"sceneHandle"), @"scene");
-        NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
-        if ([lockAssertions containsObject:sceneAppBundleID])
+        id sceneHandle = objcInvoke([currentLiveCarplayWindow appViewController], @"sceneHandle");
+        id appScene = objcInvoke(sceneHandle, @"sceneIfExists");
+        if (appScene)
         {
-            // Turn the screen off as originally intended
-            orig_BKSDisplayServicesSetScreenBlanked(1);
+            NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
+            if ([lockAssertions containsObject:sceneAppBundleID])
+            {
+                // Turn the screen off as originally intended
+                orig_BKSDisplayServicesSetScreenBlanked(1);
 
-            // Wait for the events to propagate through the system, then undo it (doing this too early doesn't work).
-            // This does not actually turn the display on
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                orig_BKSDisplayServicesSetScreenBlanked(0);
-            });
-            return 0;
+                // Wait for the events to propagate through the system, then undo it (doing this too early doesn't work).
+                // This does not actually turn the display on
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                    orig_BKSDisplayServicesSetScreenBlanked(0);
+                });
+                return 0;
+            }
         }
     }
 

@@ -46,6 +46,7 @@ Include all User applications on the CarPlay dashboard
 */
 + (id)_newApplicationLibrary
 {
+    LOG_LIFECYCLE_EVENT;
     id allAppsConfiguration = [[objc_getClass("FBSApplicationLibraryConfiguration") alloc] init];
     objcInvoke_1(allAppsConfiguration, @"setApplicationInfoClass:", objc_getClass("CARApplicationInfo"));
     objcInvoke_1(allAppsConfiguration, @"setApplicationPlaceholderClass:", objc_getClass("FBSApplicationPlaceholder"));
@@ -115,6 +116,7 @@ When an app is launched via Carplay dashboard
 {
     if ([objcInvoke(arg1, @"tags") containsObject:@"CarPlayEnable"])
     {
+        LOG_LIFECYCLE_EVENT;
         [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable" object:nil userInfo:@{@"identifier": objcInvoke(arg1, @"bundleIdentifier")}];
 
         id sharedApp = [UIApplication sharedApplication];

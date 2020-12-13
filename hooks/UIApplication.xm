@@ -26,6 +26,7 @@ When Carplay window is requesting the app to rotate
 %new
 - (void)handleRotationRequest:(id)notification
 {
+    LOG_LIFECYCLE_EVENT;
     orientationOverride = [objcInvoke(notification, @"userInfo")[@"orientation"] intValue];
 
     int orientationToRequest = orientationOverride;
@@ -52,6 +53,7 @@ Called when a window intends to rotate to a new orientation. Used to force lands
 {
     if (orientationOverride > 0)
     {
+        LOG_LIFECYCLE_EVENT;
         return %orig(orientationOverride, duration, force);
     }
     %orig;

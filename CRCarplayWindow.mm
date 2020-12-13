@@ -131,6 +131,7 @@ id getCarplayCADisplay(void)
 
 - (void)setupLaunchImage
 {
+    LOG_LIFECYCLE_EVENT;
     // Fetch a snapshot to use
     id launchImageSnapshotManifest = objcInvoke_1([objc_getClass("XBApplicationSnapshotManifest") alloc], @"initWithApplicationInfo:", objcInvoke(self.application, @"info"));
     // There's a few variants of snapshots offered: portait/landscape, dark/light.
@@ -150,7 +151,6 @@ id getCarplayCADisplay(void)
                     if ([objcInvoke(snapshotCandidate, @"name") isEqualToString:@"CarPlayLaunchImage"])
                     {
                         appSnapshot = snapshotCandidate;
-                        NSLog(@"using scene content for now %@", snapshotCandidate);
                         break;
                     }
                 }
@@ -158,7 +158,6 @@ id getCarplayCADisplay(void)
                 BOOL isStaticOrGeneratedImage = (snapshotContentType == 1 || snapshotContentType == 2);
                 if (isStaticOrGeneratedImage)
                 {
-                    NSLog(@"using native landscape %@", snapshotCandidate);
                     appSnapshot = snapshotCandidate;
                     break;
                 }
@@ -187,6 +186,7 @@ id getCarplayCADisplay(void)
 
 - (void)setupLiveAppView
 {
+    LOG_LIFECYCLE_EVENT;
     NSString *appIdentifier = objcInvoke(self.application, @"bundleIdentifier");
 
     NSMutableArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
@@ -283,12 +283,14 @@ Use this to close the window on the CarPlay screen if the app crashes or is kill
 */
 - (void)sceneMonitor:(id)arg1 sceneWasDestroyed:(id)arg2
 {
+    LOG_LIFECYCLE_EVENT;
     // Close the window
     objcInvoke(self, @"dismiss");
 }
 
 - (void)exitFullscreen
 {
+    LOG_LIFECYCLE_EVENT;
     if ([self fullscreenTransparentOverlay] != nil)
     {
         [[self fullscreenTransparentOverlay] removeFromSuperview];
@@ -298,6 +300,7 @@ Use this to close the window on the CarPlay screen if the app crashes or is kill
 
 - (void)enterFullscreen
 {
+    LOG_LIFECYCLE_EVENT;
     // Only need fullscreen when in landscape
     if (UIInterfaceOrientationIsPortrait(self.orientation))
     {
@@ -322,6 +325,7 @@ When a CarPlay App is closed
 */
 - (void)dismiss
 {
+    LOG_LIFECYCLE_EVENT;
     // Invalidate the scene monitor
     [self.sceneMonitor invalidate];
 
@@ -372,6 +376,7 @@ When a CarPlay App is closed
         // If the device is locked, set the screen state to off
         if (objcInvokeT(sharedApp, @"isLocked", BOOL) == YES)
         {
+            //TODO: fade backlight!
             orig_BKSDisplayServicesSetScreenBlanked(1);
         }
 
@@ -381,7 +386,7 @@ When a CarPlay App is closed
     [UIView animateWithDuration:0.2 animations:^(void)
     {
         [[self rootWindow] setAlpha:0];
-    } completion:^(BOOL a)
+    } completion:^(BOOL completed)
     {
         cleanupAfterCarplay();
     }];
@@ -392,6 +397,7 @@ When the "rotate orientation" button is pressed on a CarplayEnabled app window
 */
 - (void)handleRotate
 {
+    LOG_LIFECYCLE_EVENT;
     int desiredOrientation = (UIInterfaceOrientationIsLandscape(self.orientation)) ? 1 : 3;
 
     id appScene = objcInvoke(objcInvoke([self appViewController], @"sceneHandle"), @"scene");
@@ -406,6 +412,7 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
 */
 - (void)resizeAppViewForOrientation:(int)desiredOrientation fullscreen:(BOOL)fullscreen forceUpdate:(BOOL)forceUpdate
 {
+    LOG_LIFECYCLE_EVENT;
     if (!forceUpdate && (desiredOrientation == self.orientation && self.isFullscreen == fullscreen))
     {
         return;

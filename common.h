@@ -3,6 +3,16 @@
 #include <objc/message.h>
 #include <dlfcn.h>
 
+#define LOG_LIFECYCLE_EVENT { \
+    NSString *func = [NSString stringWithFormat:@"%s", __func__]; \
+    if ([func containsString:@"_method$"]) \
+    { \
+        NSArray *components = [func componentsSeparatedByString:@"$"]; \
+        func = [NSString stringWithFormat:@"[%@ %@]", components[2], components[3]]; \
+    } \
+    NSLog(@"LOG_LIFECYCLE_EVENT %@", func); \
+}
+
 #define getIvar(object, ivar) [object valueForKey:ivar]
 #define setIvar(object, ivar, value) [object setValue:value forKey:ivar]
 
