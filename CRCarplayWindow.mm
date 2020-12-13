@@ -42,26 +42,21 @@ id getCarplayCADisplay(void)
         assertGotExpectedObject(displayConfiguration, @"FBSDisplayConfiguration");
 
         self.rootWindow = objcInvoke_1([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
+        [self.rootWindow.layer setCornerRadius:13.0f];
+        [self.rootWindow.layer setMasksToBounds:YES];
+        [self setupDock];
 
         [self setupLiveAppView];
 
         // Add the user's wallpaper to the window. It will be visible when the app is in portrait mode
         CGRect rootWindowFrame = [[self rootWindow] frame];
-        UIImageView *wallpaperImageView = [[UIImageView alloc] initWithFrame:rootWindowFrame];
-        id defaultWallpaper = objcInvoke(objc_getClass("CRSUIWallpaperPreferences"), @"defaultWallpaper");
-        assertGotExpectedObject(defaultWallpaper, @"CRSUIWallpaper");
 
-        UIImage *wallpaperImage = objcInvoke_1(defaultWallpaper, @"wallpaperImageCompatibleWithTraitCollection:", nil);
-        [wallpaperImageView setImage:wallpaperImage];
-        [[self rootWindow] addSubview:wallpaperImageView];
-
-        self.appContainerView = [[UIView alloc] initWithFrame:CGRectMake(40, rootWindowFrame.origin.y, rootWindowFrame.size.width - 40, rootWindowFrame.size.height)];
+        self.appContainerView = [[UIView alloc] initWithFrame:CGRectMake(CARPLAY_DOCK_WIDTH, rootWindowFrame.origin.y, rootWindowFrame.size.width - CARPLAY_DOCK_WIDTH, rootWindowFrame.size.height)];
         [[self appContainerView] setBackgroundColor:[UIColor clearColor]];
         [[self rootWindow] addSubview:[self appContainerView]];
 
         // The scene does not show a launch image, it needs to be created manually.
         [self setupLaunchImage];
-        [self setupDock];
 
         // Add the live app view
         [[self appContainerView] addSubview:objcInvoke(self.appViewController, @"view")];
@@ -101,31 +96,58 @@ id getCarplayCADisplay(void)
 - (void)setupDock
 {
     CGRect rootWindowFrame = [[self rootWindow] frame];
-    self.dockView = [[UIView alloc] initWithFrame:CGRectMake(0, rootWindowFrame.origin.y, 40, rootWindowFrame.size.height)];
-    [self.dockView setBackgroundColor:[UIColor lightGrayColor]];
+    UITraitCollection *carplayTrait = [UITraitCollection traitCollectionWithUserInterfaceIdiom:3];
+    UITraitCollection *interfaceStyleTrait = [UITraitCollection traitCollectionWithUserInterfaceStyle:1];
+    UITraitCollection *traitCollection = [UITraitCollection traitCollectionWithTraitsFromCollections:@[carplayTrait, interfaceStyleTrait]];
+
+    UIImageView *wallpaperImageView = [[UIImageView alloc] initWithFrame:rootWindowFrame];
+    id defaultWallpaper = objcInvoke(objc_getClass("CRSUIWallpaperPreferences"), @"defaultWallpaper");
+    assertGotExpectedObject(defaultWallpaper, @"CRSUIWallpaper");
+
+    UIImage *wallpaperImage = objcInvoke_1(defaultWallpaper, @"wallpaperImageCompatibleWithTraitCollection:", nil);
+    [wallpaperImageView setImage:wallpaperImage];
+    [[self rootWindow] addSubview:wallpaperImageView];
+
+    self.dockView = [[UIView alloc] initWithFrame:CGRectMake(0, rootWindowFrame.origin.y, CARPLAY_DOCK_WIDTH, rootWindowFrame.size.height)];
+
+    // Setup blur effects
+    UIVisualEffectView *effectsView = [[UIVisualEffectView alloc] initWithFrame:rootWindowFrame];
+    id colorEffect = objcInvoke_1(objc_getClass("UIColorEffect"), @"colorEffectSaturate:", 2.0);
+    id blurEffect = objcInvoke_1(objc_getClass("UIBlurEffect"), @"effectWithBlurRadius:", 20.0);
+    id darkEffect = objcInvoke_3(objc_getClass("UIVisualEffect"), @"effectCompositingColor:withMode:alpha:", [UIColor blackColor], 7, 0.6);
+    NSArray *effects = @[colorEffect, blurEffect, darkEffect];
+    objcInvoke_1(effectsView, @"setBackgroundEffects:", effects);
+    [self.dockView addSubview:effectsView];
+
     [[self rootWindow] addSubview:self.dockView];
 
-    id imageConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:40];
+    NSBundle *carplayBundle = [NSBundle bundleWithPath:@"/System/Library/CoreServices/CarPlay.app"];
 
+    CGFloat buttonSize = 35;
     UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    [closeButton setImage:[UIImage systemImageNamed:@"xmark.circle" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
+    UIImage *homeButtonLightImage = [[UIImage imageNamed:@"CarStatusBarIconsHomeButton" inBundle:carplayBundle compatibleWithTraitCollection:traitCollection] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    [closeButton setImage:homeButtonLightImage forState:UIControlStateNormal];
     [closeButton addTarget:self action:@selector(dismiss) forControlEvents:UIControlEventTouchUpInside];
-    [closeButton setFrame:CGRectMake(0, 10, 35.0, 35.0)];
-    [closeButton setTintColor:[UIColor blackColor]];
+    [closeButton setFrame:CGRectMake((CARPLAY_DOCK_WIDTH - buttonSize) / 2, rootWindowFrame.size.height - buttonSize, buttonSize, buttonSize)];
+    [closeButton setTintColor:[UIColor whiteColor]];
     [self.dockView addSubview:closeButton];
+
+    id imageConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:24 weight:UIImageSymbolWeightLight];
+
+    buttonSize = 30;
 
     UIButton *rotateButton = [UIButton buttonWithType:UIButtonTypeCustom];
     [rotateButton setImage:[UIImage systemImageNamed:@"rotate.right" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
     [rotateButton addTarget:self action:@selector(handleRotate) forControlEvents:UIControlEventTouchUpInside];
-    [rotateButton setFrame:CGRectMake(0, rootWindowFrame.size.height - 45, 35.0, 35.0)];
-    [rotateButton setTintColor:[UIColor blackColor]];
+    [rotateButton setFrame:CGRectMake((CARPLAY_DOCK_WIDTH - buttonSize) / 2, 10, buttonSize, buttonSize)];
+    [rotateButton setTintColor:[UIColor whiteColor]];
     [self.dockView addSubview:rotateButton];
 
     UIButton *fullscreenButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    [fullscreenButton setImage:[UIImage systemImageNamed:@"rotate.right" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
+    [fullscreenButton setImage:[UIImage systemImageNamed:@"arrow.up.left.and.arrow.down.right" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
     [fullscreenButton addTarget:self action:@selector(enterFullscreen) forControlEvents:UIControlEventTouchUpInside];
-    [fullscreenButton setFrame:CGRectMake(0, rootWindowFrame.size.height - 100, 35.0, 35.0)];
-    [fullscreenButton setTintColor:[UIColor blackColor]];
+    [fullscreenButton setFrame:CGRectMake((CARPLAY_DOCK_WIDTH - buttonSize) / 2, 50, buttonSize, buttonSize)];
+    [fullscreenButton setTintColor:[UIColor whiteColor]];
     [self.dockView addSubview:fullscreenButton];
 }
 
@@ -431,6 +453,7 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
     {
         return;
     }
+
     CGRect carplayDisplayBounds = [carplayScreen bounds];
     CGFloat dockWidth = (fullscreen) ? 0 : CARPLAY_DOCK_WIDTH;
     CGSize carplayDisplaySize = CGSizeMake(carplayDisplayBounds.size.width - dockWidth, carplayDisplayBounds.size.height);
