@@ -136,19 +136,19 @@ id getCarplayCADisplay(void)
 
     buttonSize = 30;
 
-    UIButton *rotateButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    [rotateButton setImage:[UIImage systemImageNamed:@"rotate.right" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
-    [rotateButton addTarget:self action:@selector(handleRotate) forControlEvents:UIControlEventTouchUpInside];
-    [rotateButton setFrame:CGRectMake((CARPLAY_DOCK_WIDTH - buttonSize) / 2, 10, buttonSize, buttonSize)];
-    [rotateButton setTintColor:[UIColor whiteColor]];
-    [self.dockView addSubview:rotateButton];
-
     UIButton *fullscreenButton = [UIButton buttonWithType:UIButtonTypeCustom];
     [fullscreenButton setImage:[UIImage systemImageNamed:@"arrow.up.left.and.arrow.down.right" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
     [fullscreenButton addTarget:self action:@selector(enterFullscreen) forControlEvents:UIControlEventTouchUpInside];
-    [fullscreenButton setFrame:CGRectMake((CARPLAY_DOCK_WIDTH - buttonSize) / 2, 50, buttonSize, buttonSize)];
+    [fullscreenButton setFrame:CGRectMake((CARPLAY_DOCK_WIDTH - buttonSize) / 2, 10, buttonSize, buttonSize)];
     [fullscreenButton setTintColor:[UIColor whiteColor]];
     [self.dockView addSubview:fullscreenButton];
+
+    UIButton *rotateButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    [rotateButton setImage:[UIImage systemImageNamed:@"rotate.right" withConfiguration:imageConfiguration] forState:UIControlStateNormal];
+    [rotateButton addTarget:self action:@selector(handleRotate) forControlEvents:UIControlEventTouchUpInside];
+    [rotateButton setFrame:CGRectMake((CARPLAY_DOCK_WIDTH - buttonSize) / 2, fullscreenButton.frame.origin.y + 10 + buttonSize, buttonSize, buttonSize)];
+    [rotateButton setTintColor:[UIColor whiteColor]];
+    [self.dockView addSubview:rotateButton];
 }
 
 - (void)setupLaunchImage
@@ -339,7 +339,9 @@ Use this to close the window on the CarPlay screen if the app crashes or is kill
     [self.fullscreenTransparentOverlay setUserInteractionEnabled:YES];
     [[self rootWindow] addSubview:self.fullscreenTransparentOverlay];
 
-    [self resizeAppViewForOrientation:self.orientation fullscreen:toFullScreen forceUpdate:NO];
+    [UIView animateWithDuration:0.2 animations:^(void) {
+        [self resizeAppViewForOrientation:self.orientation fullscreen:toFullScreen forceUpdate:NO];
+    } completion:nil];
 }
 
 /*
@@ -482,7 +484,7 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
     containingViewFrame.origin.x = dockWidth;
     [containingView setFrame:containingViewFrame];
 
-    [self.dockView setHidden:fullscreen];
+    [self.dockView setAlpha: (fullscreen) ? 0: 1];
 
     // Update last known orientation and fullscreen status
     self.orientation = desiredOrientation;
