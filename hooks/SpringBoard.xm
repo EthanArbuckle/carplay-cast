@@ -6,7 +6,6 @@ Injected into SpringBoard.
 */
 %group SPRINGBOARD
 
-id currentLiveCarplayWindow = nil;
 int (*orig_BKSDisplayServicesSetScreenBlanked)(int);
 
 /*
@@ -50,7 +49,8 @@ When an app icon is tapped on the Carplay dashboard
     @try
     {
         NSString *identifier = [notification userInfo][@"identifier"];
-        currentLiveCarplayWindow = [[CRCarPlayWindow alloc] initWithBundleIdentifier:identifier];
+        id liveCarplayWindow = [[CRCarPlayWindow alloc] initWithBundleIdentifier:identifier];
+        objc_setAssociatedObject(self, &kPropertyKey_liveCarplayWindow, liveCarplayWindow, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     @catch (NSException *exception)
     {
@@ -71,6 +71,12 @@ Invoked when SpringBoard finishes launching
     objc_setAssociatedObject(self, &kPropertyKey_lockAssertionIdentifiers, appIdentifiersToIgnoreLockAssertions, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     %orig;
+}
+
+%new
+- (id)liveCarplayWindow
+{
+    return objc_getAssociatedObject(self, &kPropertyKey_liveCarplayWindow);
 }
 
 %end
@@ -129,7 +135,7 @@ than the device orientation. Force the switcher to use the device's physical ori
 */
 - (void)_updateContentViewInterfaceOrientation:(int)arg1
 {
-    if (currentLiveCarplayWindow != nil)
+    if (objcInvoke([UIApplication sharedApplication], @"liveCarplayWindow") != nil)
     {
         LOG_LIFECYCLE_EVENT;
         // Match the device orientation instead of app orientation
@@ -150,9 +156,10 @@ Is this a main-screen scene view for an application that is being hosted on the 
 %new
 - (BOOL)isMainScreenCounterpartToLiveCarplayApp
 {
-    if (currentLiveCarplayWindow != nil)
+    id liveCarplayWindow = objcInvoke([UIApplication sharedApplication], @"liveCarplayWindow");
+    if (liveCarplayWindow != nil)
     {
-        id liveAppViewController = [currentLiveCarplayWindow appViewController];
+        id liveAppViewController = [liveCarplayWindow appViewController];
         id currentSceneHandle = objcInvoke(self, @"sceneHandle");
         id carplaySceneHandle = objcInvoke(liveAppViewController, @"sceneHandle");
         if ([currentSceneHandle isEqual:carplaySceneHandle])
@@ -330,13 +337,14 @@ Called when the device's main screen is turning on or off
 */
 int hook_BKSDisplayServicesSetScreenBlanked(int arg1)
 {
-    if (arg1 == 1 && currentLiveCarplayWindow != nil)
+    id liveCarplayWindow = objcInvoke([UIApplication sharedApplication], @"liveCarplayWindow");
+    if (arg1 == 1 && liveCarplayWindow != nil)
     {
         LOG_LIFECYCLE_EVENT;
         // The device's screen is turning off while an app is hosted on the carplay display
         NSArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
 
-        id sceneHandle = objcInvoke([currentLiveCarplayWindow appViewController], @"sceneHandle");
+        id sceneHandle = objcInvoke([liveCarplayWindow appViewController], @"sceneHandle");
         id appScene = objcInvoke(sceneHandle, @"sceneIfExists");
         if (appScene)
         {

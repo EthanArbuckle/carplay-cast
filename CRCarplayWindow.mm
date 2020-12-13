@@ -384,6 +384,7 @@ When a CarPlay App is closed
             }
         }
 
+        objc_setAssociatedObject(sharedApp, &kPropertyKey_liveCarplayWindow, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         // todo: resign first responder (kb causes glitches on return)
     };
 

@@ -24,6 +24,7 @@
 
 #define assertGotExpectedObject(obj, type) if (!obj || ![obj isKindOfClass:NSClassFromString(type)]) [NSException raise:@"UnexpectedObjectException" format:@"Expected %@ but got %@", type, obj]
 
+#define kPropertyKey_liveCarplayWindow *NSSelectorFromString(@"liveCarplayWindow")
 #define kPropertyKey_lockAssertionIdentifiers *NSSelectorFromString(@"lockAssertions")
 static char *kPropertyKey_didDrawPlaceholder;
 
