@@ -1,0 +1,36 @@
+name: Build
+on:
+  push:
+    tags:
+      - 'v*' 
+jobs:
+  build:
+    name: Build Tweal
+    runs-on: macOS-latest
+    env:
+      THEOS: theos
+ 
+steps:
+    - name: Checkout
+      uses: actions/checkout@master
+    - name: Install Dependencies
+      run: brew install ldid xz
+    - name: Setup Theos
+      uses: actions/checkout@master
+      with:
+        repository: theos/theos
+        ref: 8771215f765e774bfefdacc6ddf0e151c2973d49
+        path: theos
+        submodules: recursive
+    - name: Download SDKs
+      run: |
+        curl -LO https://github.com/SamHep0803/iOS-13-Patched-SDK/archive/master.zip
+        TMP=$(mktemp -d)
+        unzip master.zip -d $TMP
+        mv $TMP/iOS-13-Patched-SDK-master/*.sdk theos/sdks
+        rm -r master.zip $TMP
+    - name: Build Package
+      id: build_package
+      run: |
+        make package FINALPACKAGE=1
+        echo "::set-output name=package::$(ls -t packages | head -n1)"
