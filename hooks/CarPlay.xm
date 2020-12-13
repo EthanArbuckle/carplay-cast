@@ -243,7 +243,8 @@ will launch their normal Carplay mode UI
 %end
 
 
-%ctor {
+%ctor
+{
     if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"CarPlay"])
     {
         %init(CARPLAY);

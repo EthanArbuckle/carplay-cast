@@ -110,7 +110,8 @@ Use this to prevent the App from going to sleep when other applications are laun
 - (void)updateSettings:(id)arg1 withTransitionContext:(id)arg2 completion:(void *)arg3
 {
     id sceneClient = objcInvoke(self, @"client");
-    if ([sceneClient respondsToSelector:NSSelectorFromString(@"process")]) {
+    if ([sceneClient respondsToSelector:NSSelectorFromString(@"process")])
+    {
         NSString *sceneAppBundleID = objcInvoke(objcInvoke(sceneClient, @"process"), @"bundleIdentifier");
         NSArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
         if ([lockAssertions containsObject:sceneAppBundleID])
@@ -160,9 +161,8 @@ Is this a main-screen scene view for an application that is being hosted on the 
     if (liveCarplayWindow != nil)
     {
         id liveAppViewController = [liveCarplayWindow appViewController];
-        id currentSceneHandle = objcInvoke(self, @"sceneHandle");
         id carplaySceneHandle = objcInvoke(liveAppViewController, @"sceneHandle");
-        if ([currentSceneHandle isEqual:carplaySceneHandle])
+        if ([carplaySceneHandle isEqual:objcInvoke(self, @"sceneHandle")])
         {
             LOG_LIFECYCLE_EVENT;
             id carplayAppViewController = getIvar(liveAppViewController, @"_deviceAppViewController");
@@ -369,7 +369,8 @@ int hook_BKSDisplayServicesSetScreenBlanked(int arg1)
 
 %end
 
-%ctor {
+%ctor
+{
     if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"SpringBoard"])
     {
         %init(SPRINGBOARD);
