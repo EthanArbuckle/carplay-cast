@@ -1,8 +1,5 @@
 name: Build
-on:
-  push:
-    tags:
-      - 'v*' 
+on: push
 jobs:
   build:
     name: Build Tweal
