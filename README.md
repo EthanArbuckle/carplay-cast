@@ -7,23 +7,23 @@ Use any application with CarPlay.
 
 # FAQ
 
-**Q: Do apps work when the device is locked**
+**Do apps work when the device is locked**
 
-A: Yes
+Yes
 
 
-**Q: Does YouTube work**
+**Does YouTube work**
 
-A: Yes
+Yes
 
-**Q: Can you use other apps on the phone while something is running on CarPlay**
+**Can you use other apps on the phone while something is running on CarPlay**
 
-A: Yes
+Yes
 
-**Q: Is there a fullscreen mode**
+**Is there a fullscreen mode**
 
-A: Yes
+Yes
 
-**Q: Is iOS 13 supported**
+**Is iOS 13 supported**
 
-A: No, only iOS 14
+No, only iOS 14
