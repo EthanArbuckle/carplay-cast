@@ -121,6 +121,27 @@ Use this to prevent the App from going to sleep when other applications are laun
 
 %end
 
+%hook SBMainSwitcherViewController
+
+/*
+The app switcher matches the orientation of the frontmost app. When an app is on Carplay, this could be different
+than the device orientation. Force the switcher to use the device's physical orientation when a Carplay-hosted app is frontmost
+*/
+- (void)_updateContentViewInterfaceOrientation:(int)arg1
+{
+    if (currentLiveCarplayWindow != nil)
+    {
+        LOG_LIFECYCLE_EVENT;
+        // Match the device orientation instead of app orientation
+        int deviceOrientation = [[UIDevice currentDevice] orientation];
+        return %orig(deviceOrientation);
+    }
+
+    return %orig;
+}
+
+%end
+
 %hook SBDeviceApplicationSceneView
 
 /*
