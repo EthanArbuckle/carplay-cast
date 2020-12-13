@@ -373,11 +373,15 @@ When a CarPlay App is closed
             }
         }
 
-        // If the device is locked, set the screen state to off
+        // If the device is locked and screen off, set the screen state to off
         if (objcInvokeT(sharedApp, @"isLocked", BOOL) == YES)
         {
-            //TODO: fade backlight!
-            orig_BKSDisplayServicesSetScreenBlanked(1);
+            void *_BKSHIDServicesGetBacklightFactor = dlsym(RTLD_DEFAULT, "BKSHIDServicesGetBacklightFactor");
+            float backlightFactor = ((float (*)(void))_BKSHIDServicesGetBacklightFactor)();
+            if (backlightFactor < 0.2)
+            {
+                orig_BKSDisplayServicesSetScreenBlanked(1);
+            }
         }
 
         // todo: resign first responder (kb causes glitches on return)
