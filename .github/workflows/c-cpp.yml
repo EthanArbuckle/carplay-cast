@@ -2,7 +2,7 @@ name: Build
 on: push
 jobs:
   build:
-    name: Build Tweal
+    name: Build Tweak
     runs-on: macOS-latest
     env:
       THEOS: theos
