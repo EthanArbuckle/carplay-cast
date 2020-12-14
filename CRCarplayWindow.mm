@@ -106,16 +106,20 @@ id getCarplayCADisplay(void)
 
     UIImage *wallpaperImage = objcInvoke_1(defaultWallpaper, @"wallpaperImageCompatibleWithTraitCollection:", nil);
     [wallpaperImageView setImage:wallpaperImage];
+    UIVisualEffectView *wallpaperBlurView = [[UIVisualEffectView alloc] initWithEffect:objcInvoke_1(objc_getClass("UIBlurEffect"), @"effectWithBlurRadius:", 10.0)];
+    [wallpaperBlurView setFrame:rootWindowFrame];
+    [wallpaperImageView addSubview:wallpaperBlurView];
     [[self rootWindow] addSubview:wallpaperImageView];
 
     self.dockView = [[UIView alloc] initWithFrame:CGRectMake(0, rootWindowFrame.origin.y, CARPLAY_DOCK_WIDTH, rootWindowFrame.size.height)];
 
-    // Setup blur effects
-    UIVisualEffectView *effectsView = [[UIVisualEffectView alloc] initWithFrame:rootWindowFrame];
-    id colorEffect = objcInvoke_1(objc_getClass("UIColorEffect"), @"colorEffectSaturate:", 2.0);
+    // Setup dock visual effects
     id blurEffect = objcInvoke_1(objc_getClass("UIBlurEffect"), @"effectWithBlurRadius:", 20.0);
+    UIVisualEffectView *effectsView = [[UIVisualEffectView alloc] init];
+    [effectsView setFrame:CGRectMake(0, 0, CARPLAY_DOCK_WIDTH, rootWindowFrame.size.height)];
+    id colorEffect = objcInvoke_1(objc_getClass("UIColorEffect"), @"colorEffectSaturate:", 2.0);
     id darkEffect = objcInvoke_3(objc_getClass("UIVisualEffect"), @"effectCompositingColor:withMode:alpha:", [UIColor blackColor], 7, 0.6);
-    NSArray *effects = @[colorEffect, blurEffect, darkEffect];
+    NSArray *effects = @[darkEffect, colorEffect, blurEffect];
     objcInvoke_1(effectsView, @"setBackgroundEffects:", effects);
     [self.dockView addSubview:effectsView];
 
