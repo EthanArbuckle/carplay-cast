@@ -412,7 +412,7 @@ When a CarPlay App is closed
         // todo: resign first responder (kb causes glitches on return)
     };
 
-    [UIView animateWithDuration:0.2 animations:^(void)
+    [UIView animateWithDuration:0.5 animations:^(void)
     {
         [[self rootWindow] setAlpha:0];
     } completion:^(BOOL completed)
