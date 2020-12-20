@@ -12,3 +12,6 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 
 after-install::
 	install.exec "killall -9 SpringBoard CarPlay"
+
+test::
+	install.exec "cycript -p SpringBoard" < tests.cy
