@@ -20,6 +20,7 @@ id getCarplayCADisplay(void)
             return display;
         }
     }
+
     return nil;
 }
 

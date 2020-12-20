@@ -14,4 +14,5 @@ after-install::
 	install.exec "killall -9 SpringBoard CarPlay"
 
 test::
-	install.exec "cycript -p SpringBoard" < tests.cy
+	install.exec "cycript -p SpringBoard" < tests/springboard_tests.cy
+	install.exec "cycript -p CarPlay" < tests/carplay_tests.cy
