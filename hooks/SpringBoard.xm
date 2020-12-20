@@ -46,10 +46,25 @@ When an app icon is tapped on the Carplay dashboard
 - (void)handleCarPlayLaunchNotification:(id)notification
 {
     LOG_LIFECYCLE_EVENT;
+    NSString *identifier = [notification userInfo][@"identifier"];
+    objcInvoke_1(self, @"launchAppOnCarplay:", identifier);
+}
+
+%new
+- (void)launchAppOnCarplay:(NSString *)identifier
+{
+    LOG_LIFECYCLE_EVENT;
     @try
     {
-        NSString *identifier = [notification userInfo][@"identifier"];
-        id liveCarplayWindow = [[CRCarPlayWindow alloc] initWithBundleIdentifier:identifier];
+        // Dismiss any apps that are already being hosted on Carplay
+        id liveCarplayWindow = objcInvoke([UIApplication sharedApplication], @"liveCarplayWindow");
+        if (liveCarplayWindow != nil)
+        {
+            objcInvoke(liveCarplayWindow, @"dismiss");
+        }
+        
+        // Launch the requested app
+        liveCarplayWindow = [[CRCarPlayWindow alloc] initWithBundleIdentifier:identifier];
         objc_setAssociatedObject(self, &kPropertyKey_liveCarplayWindow, liveCarplayWindow, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     @catch (NSException *exception)
