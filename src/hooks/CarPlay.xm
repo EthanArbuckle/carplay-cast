@@ -121,7 +121,7 @@ When an app is launched via Carplay dashboard
         [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable" object:nil userInfo:@{@"identifier": objcInvoke(arg1, @"bundleIdentifier")}];
 
         id sharedApp = [UIApplication sharedApplication];
-        id appHistory = objcInvoke(sharedApp, @"_currentAppHistory");
+        id appHistory = objcInvoke(sharedApp, @"2_currentAppHistory");
 
         NSString *previousBundleID = nil;
         NSArray *orderedAppHistory = objcInvoke(appHistory, @"orderedAppHistory");
