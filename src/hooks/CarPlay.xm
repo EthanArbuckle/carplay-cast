@@ -15,6 +15,12 @@ struct SBIconImageInfo {
 
 void addCarplayDeclarationsToAppLibrary(id appLibrary)
 {
+    NSArray *blacklistedIdentifiers = nil;
+    if ([[NSFileManager defaultManager] fileExistsAtPath:BLACKLIST_PLIST_PATH])
+    {
+        blacklistedIdentifiers = [NSArray arrayWithContentsOfFile:BLACKLIST_PLIST_PATH];
+    }
+
     for (id appInfo in objcInvoke(appLibrary, @"allInstalledApplications"))
     {
         if (getIvar(appInfo, @"_carPlayDeclaration") == nil)
@@ -24,10 +30,17 @@ void addCarplayDeclarationsToAppLibrary(id appLibrary)
                 continue;
             }
 
+            // Skip it if its blacklisted
+            NSString *appBundleID = objcInvoke(appInfo, @"bundleIdentifier");
+            if (blacklistedIdentifiers && [blacklistedIdentifiers containsObject:appBundleID])
+            {
+                continue;
+            }
+
             id carplayDeclaration = [[objc_getClass("CRCarPlayAppDeclaration") alloc] init];
             objcInvoke_1(carplayDeclaration, @"setSupportsTemplates:", 0);
             objcInvoke_1(carplayDeclaration, @"setSupportsMaps:", 1);
-            objcInvoke_1(carplayDeclaration, @"setBundleIdentifier:", objcInvoke(appInfo, @"bundleIdentifier"));
+            objcInvoke_1(carplayDeclaration, @"setBundleIdentifier:", appBundleID);
             objcInvoke_1(carplayDeclaration, @"setBundlePath:", objcInvoke(appInfo, @"bundleURL"));
             setIvar(appInfo, @"_carPlayDeclaration", carplayDeclaration);
 
