@@ -14,6 +14,7 @@
 @property (nonatomic) int orientation;
 @property (nonatomic) BOOL isFullscreen;
 @property (nonatomic) BOOL shouldGenerateSnapshot;
+@property (nonatomic) BOOL drawOnMainScreen;
 
 - (id)initWithBundleIdentifier:(NSString *)identifier;
 

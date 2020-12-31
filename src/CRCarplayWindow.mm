@@ -36,13 +36,23 @@ id getCarplayCADisplay(void)
         self.application = objcInvoke_1(objcInvoke(objc_getClass("SBApplicationController"), @"sharedInstance"), @"applicationWithBundleIdentifier:", identifier);
         assertGotExpectedObject(self.application, @"SBApplication");
 
-        id carplayExternalDisplay = getCarplayCADisplay();
-        assertGotExpectedObject(carplayExternalDisplay, @"CADisplay");
+        if (_drawOnMainScreen)
+        {
+            self.rootWindow = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+            ((void (*)(id, SEL, int, int, int, int))objc_msgSend)(self.rootWindow, NSSelectorFromString(@"_rotateWindowToOrientation:updateStatusBar:duration:skipCallbacks:"), 3, 1, 0, 0);
+        }
+        else
+        {
+            id carplayExternalDisplay = getCarplayCADisplay();
+            assertGotExpectedObject(carplayExternalDisplay, @"CADisplay");
 
-        id displayConfiguration = objcInvoke_2([objc_getClass("FBSDisplayConfiguration") alloc], @"initWithCADisplay:isMainDisplay:", carplayExternalDisplay, 0);
-        assertGotExpectedObject(displayConfiguration, @"FBSDisplayConfiguration");
+            id displayConfiguration = objcInvoke_2([objc_getClass("FBSDisplayConfiguration") alloc], @"initWithCADisplay:isMainDisplay:", carplayExternalDisplay, 0);
+            assertGotExpectedObject(displayConfiguration, @"FBSDisplayConfiguration");
 
-        self.rootWindow = objcInvoke_1([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
+            // Create window on the Carplay screen
+            self.rootWindow = objcInvoke_1([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
+        }
+
         [self.rootWindow.layer setCornerRadius:13.0f];
         [self.rootWindow.layer setMasksToBounds:YES];
         [self setupDock];
@@ -458,13 +468,25 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
     id appSceneView = getIvar(getIvar(self.appViewController, @"_deviceAppViewController"), @"_sceneView");
     assertGotExpectedObject(appSceneView, @"SBSceneView");
     UIView *hostingContentView = getIvar(appSceneView, @"_sceneContentContainerView");
-    UIScreen *carplayScreen = [[UIScreen screens] lastObject];
-    if (objcInvokeT(carplayScreen, @"_isCarScreen", BOOL) == NO)
+    UIScreen *targetScreen = nil;
+    if (_drawOnMainScreen)
     {
-        return;
+        targetScreen = [UIScreen mainScreen];
     }
+    else {
+        for (UIScreen *currentScreen in [UIScreen screens])
+        {
+            if (objcInvokeT(currentScreen, @"_isCarScreen", BOOL))
+            {
+                targetScreen = currentScreen;
+                break;
+            }
+        }
+    }
+    
+    assertGotExpectedObject(targetScreen, @"UIScreen");
 
-    CGRect carplayDisplayBounds = [carplayScreen bounds];
+    CGRect carplayDisplayBounds = [targetScreen bounds];
     CGFloat dockWidth = (fullscreen) ? 0 : CARPLAY_DOCK_WIDTH;
     CGSize carplayDisplaySize = CGSizeMake(carplayDisplayBounds.size.width - dockWidth, carplayDisplayBounds.size.height);
 

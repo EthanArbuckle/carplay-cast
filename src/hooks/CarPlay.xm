@@ -262,7 +262,7 @@ will launch their normal Carplay mode UI
     id iconView = %orig;
 
     // Add long press gesture to the dashboard's icons
-    UILongPressGestureRecognizer *launchGesture = [[UILongPressGestureRecognizer alloc] initWithTarget:_self action:NSSelectorFromString(@"handleLaunchAppInNormalMode:")];
+    UILongPressGestureRecognizer *launchGesture = [[UILongPressGestureRecognizer alloc] initWithTarget:iconView action:NSSelectorFromString(@"handleLaunchAppInNormalMode:")];
     [launchGesture setMinimumPressDuration:1.5];
     [iconView addGestureRecognizer:launchGesture];
 
