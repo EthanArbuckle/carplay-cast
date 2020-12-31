@@ -1,0 +1,1 @@
+Google Cloud Function that receives tarballs containing Crash Reports via an http endpoint. Reports are categorized by Hardware/OS info and stored in a Google Storage Bucket
