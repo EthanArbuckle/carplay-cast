@@ -48,12 +48,8 @@ When an app icon is tapped on the Carplay dashboard
 - (void)handleCarPlayLaunchNotification:(id)notification
 {
     LOG_LIFECYCLE_EVENT;
-    void (^TEST_FUNC_123)(void) = ^{
-        NSString *identifier = [notification userInfo][@"identifier"];
-        objcInvoke_1(self, @"launchAp2pOnCarplay:", identifier);
-    };
-
-    TEST_FUNC_123();
+    NSString *identifier = [notification userInfo][@"identifier"];
+    objcInvoke_1(self, @"launchAppOnCarplay:", identifier);
 }
 
 %new
@@ -75,7 +71,7 @@ When an app icon is tapped on the Carplay dashboard
     }
     @catch (NSException *exception)
     {
-        NSLog(@"failed! %@", exception);
+        NSLog(@"carplay window launch failed! %@", exception);
     }
 }
 

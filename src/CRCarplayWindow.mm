@@ -359,6 +359,7 @@ When a CarPlay App is closed
     [self.sceneMonitor invalidate];
 
     void (^cleanupAfterCarplay)() = ^() {
+        // Notify the application process to stop enforcing an orientation lock
         int resetOrientationLock = -1;
         NSString *hostedIdentifier = getIvar(self.appViewController, @"_identifier");
         [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:hostedIdentifier userInfo:@{@"orientation": @(resetOrientationLock)}];
@@ -366,6 +367,8 @@ When a CarPlay App is closed
         [self.rootWindow setHidden:YES];
         objcInvoke_1(self.appViewController, @"_setCurrentMode:", 0);
 
+        // Find the main sceen's sceneView for the dismissing app and put it in LiveContent mode (from PlaceHolder mode)
+        // This removes the placeholder view visible in the app switcher
         id currentSceneHandle = objcInvoke(self.appViewController, @"sceneHandle");
         id mainSceneLayoutController = objcInvoke(objc_getClass("SBMainDisplaySceneLayoutViewController"), @"mainDisplaySceneLayoutViewController");
         id liveAppSceneControllers = objcInvoke(mainSceneLayoutController, @"appViewControllers");
