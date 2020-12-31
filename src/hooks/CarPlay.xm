@@ -12,9 +12,14 @@ struct SBIconImageInfo {
 };
 
 %hook CARApplication
-
+/*
+Given an FBSApplicationLibrary, force all apps within the library to show up on the CarPlay dashboard.
+Exclude system apps (they are always glitchy for some reason) and enforce a blacklist.
+If an app already supports CarPlay, leave it alone
+*/
 void addCarplayDeclarationsToAppLibrary(id appLibrary)
 {
+    // Load blacklisted identifiers from filesystem
     NSArray *blacklistedIdentifiers = nil;
     if ([[NSFileManager defaultManager] fileExistsAtPath:BLACKLIST_PLIST_PATH])
     {
@@ -25,25 +30,30 @@ void addCarplayDeclarationsToAppLibrary(id appLibrary)
     {
         if (getIvar(appInfo, @"_carPlayDeclaration") == nil)
         {
+            // Skip system apps
             if ([objcInvoke(appInfo, @"bundleType") isEqualToString:@"User"] == NO)
             {
                 continue;
             }
 
-            // Skip it if its blacklisted
+            // Skip if blacklisted
             NSString *appBundleID = objcInvoke(appInfo, @"bundleIdentifier");
             if (blacklistedIdentifiers && [blacklistedIdentifiers containsObject:appBundleID])
             {
                 continue;
             }
 
+            // Create a fake declaration so this app appears to support carplay.
             id carplayDeclaration = [[objc_getClass("CRCarPlayAppDeclaration") alloc] init];
+            // This is not template-driven -- important. Without specifying this, the process that hosts the Templates will continuously spin up
+            // and crash, trying to find a non-existant template for this declaration
             objcInvoke_1(carplayDeclaration, @"setSupportsTemplates:", 0);
             objcInvoke_1(carplayDeclaration, @"setSupportsMaps:", 1);
             objcInvoke_1(carplayDeclaration, @"setBundleIdentifier:", appBundleID);
             objcInvoke_1(carplayDeclaration, @"setBundlePath:", objcInvoke(appInfo, @"bundleURL"));
             setIvar(appInfo, @"_carPlayDeclaration", carplayDeclaration);
 
+            // Add a tag to the app, to keep track of which apps have been "forced" into carplay
             NSArray *newTags = @[@"CarPlayEnable"];
             if (objcInvoke(appInfo, @"tags"))
             {
@@ -60,12 +70,15 @@ Include all User applications on the CarPlay dashboard
 + (id)_newApplicationLibrary
 {
     LOG_LIFECYCLE_EVENT;
+    // %orig creates an app library that only contains Carplay-enabled stuff, so its not useful.
+    // Create an app library that contains everything
     id allAppsConfiguration = [[objc_getClass("FBSApplicationLibraryConfiguration") alloc] init];
     objcInvoke_1(allAppsConfiguration, @"setApplicationInfoClass:", objc_getClass("CARApplicationInfo"));
     objcInvoke_1(allAppsConfiguration, @"setApplicationPlaceholderClass:", objc_getClass("FBSApplicationPlaceholder"));
     objcInvoke_1(allAppsConfiguration, @"setAllowConcurrentLoading:", 1);
     objcInvoke_1(allAppsConfiguration, @"setInstalledApplicationFilter:", ^BOOL(id appProxy, NSSet *arg2) {
         NSArray *appTags = objcInvoke(appProxy, @"appTags");
+        // Skip apps with a Hidden tag
         if ([appTags containsObject:@"hidden"])
         {
             return 0;
@@ -128,13 +141,16 @@ When an app is launched via Carplay dashboard
 
 + (id)launchInfoForApplication:(id)arg1 withActivationSettings:(id)arg2
 {
+    // An app is being launched. Use the attached tags to determine if carplay support has been coerced onto it
     if ([objcInvoke(arg1, @"tags") containsObject:@"CarPlayEnable"])
     {
         LOG_LIFECYCLE_EVENT;
+        // Notify SpringBoard of the launch. SpringBoard will host the application + UI
         [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable" object:nil userInfo:@{@"identifier": objcInvoke(arg1, @"bundleIdentifier")}];
 
+        // Add this item into the App History (so it shows up in the dock's "recents")
         id sharedApp = [UIApplication sharedApplication];
-        id appHistory = objcInvoke(sharedApp, @"2_currentAppHistory");
+        id appHistory = objcInvoke(sharedApp, @"_currentAppHistory");
 
         NSString *previousBundleID = nil;
         NSArray *orderedAppHistory = objcInvoke(appHistory, @"orderedAppHistory");
@@ -149,7 +165,7 @@ When an app is launched via Carplay dashboard
         id dockController = objcInvoke(dashboardRootController, @"appDockViewController");
         objcInvoke(dockController, @"_refreshAppDock");
 
-        // If the is already a Carplay app running, close it
+        // If there is already a native-Carplay app running, close it
         id dashboard = objcInvoke(sharedApp, @"_currentDashboard");
         assertGotExpectedObject(dashboard, @"CARDashboard");
         NSDictionary *foregroundScenes = objcInvoke(dashboard, @"identifierToForegroundAppScenesMap");
@@ -162,10 +178,8 @@ When an app is launched via Carplay dashboard
 
         return nil;
     }
-    else
-    {
-        return %orig;
-    }
+    
+    return %orig;
 }
 
 %end
@@ -245,11 +259,14 @@ will launch their normal Carplay mode UI
 
 - (id)initWithConfigurationOptions:(unsigned long long)arg1 listLayoutProvider:(id)arg2
 {
-    id _self = %orig;
+    id iconView = %orig;
+
+    // Add long press gesture to the dashboard's icons
     UILongPressGestureRecognizer *launchGesture = [[UILongPressGestureRecognizer alloc] initWithTarget:_self action:NSSelectorFromString(@"handleLaunchAppInNormalMode:")];
     [launchGesture setMinimumPressDuration:1.5];
-    [_self addGestureRecognizer:launchGesture];
-    return _self;
+    [iconView addGestureRecognizer:launchGesture];
+
+    return iconView;
 }
 
 %end
