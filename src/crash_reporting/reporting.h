@@ -1,0 +1,1 @@
+void symbolicateAndUploadCrashlogs(void);

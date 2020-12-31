@@ -1,6 +1,6 @@
 #include "../common.h"
 #include "../CRCarplayWindow.h"
-
+#include "../crash_reporting/reporting.h"
 
 
 /*
@@ -39,7 +39,14 @@ Invoked when the device is being locked while applications are running/active
 
 %end
 
+
 %hook SpringBoard
+
+%new
+- (void)symbolicateCrashlogs
+{
+    symbolicateAndUploadCrashlogs();
+}
 
 /*
 When an app icon is tapped on the Carplay dashboard
