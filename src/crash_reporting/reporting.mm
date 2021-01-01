@@ -1,4 +1,6 @@
 #include <mach/mach.h>
+#include "../common.h"
+#include "reporting.h"
 
 
 struct sCSTypeRef {
@@ -130,8 +132,38 @@ void symbolicateAndUploadCrashlogs(void)
     [[NSFileManager defaultManager] createDirectoryAtPath:crashReportsStash withIntermediateDirectories:NO attributes:nil error:NULL];
 
     // Gather logs from all sources
-    gatherUnsymbolicatedCrashlogs(crashReportsStash);    
+    gatherUnsymbolicatedCrashlogs(crashReportsStash);
     gatherCr4shedLogs(crashReportsStash);
-    
-    // TODO delete files
+
+    NSArray *reports = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:crashReportsStash error:nil];
+    if ([reports count] > 0)
+    {
+        // Archive them
+        NSString *archivePath = @"/tmp/crash_reports.tar.gz";
+
+        id task = [[objc_getClass("NSTask") alloc] init];
+        objcInvoke_1(task, @"setLaunchPath:", @"/bin/sh");
+        NSString *tarCommand = [NSString stringWithFormat:@"tar cfz %@ -C /tmp/ crash_reports", archivePath];
+        NSArray *args = @[@"--login", @"-c", tarCommand];
+        objcInvoke_1(task, @"setArguments:", args);
+        objcInvoke(task, @"launch");
+        objcInvoke(task, @"waitUntilExit");
+        int status = objcInvokeT(task, @"terminationStatus", int);
+        if (status == 0)
+        {
+            // Upload the archive
+            NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:CRASH_REPORT_URL]];
+            [request setHTTPMethod:@"POST"];
+            NSURLSessionUploadTask *uploadTask = [[NSURLSession sharedSession] uploadTaskWithRequest:request fromFile:[NSURL URLWithString:archivePath] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+                // Delete the archive when the upload completes
+                if ([[NSFileManager defaultManager] fileExistsAtPath:archivePath])
+                {
+                    [[NSFileManager defaultManager] removeItemAtPath:archivePath error:nil];
+                }
+            }];
+            [uploadTask resume];
+        }
+    }
+
+    [[NSFileManager defaultManager] removeItemAtPath:crashReportsStash error:nil];
 }

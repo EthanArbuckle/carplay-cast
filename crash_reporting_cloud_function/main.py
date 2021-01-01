@@ -13,7 +13,7 @@ def find_value_for_key(key: bytes, contents: bytes) -> str:
             value = content_line.replace(key, b"").strip()
             value = value.replace(b" ", b"-")
             return value.decode("utf-8")
-    return "unknown"
+    return None
 
 
 def process_crash_reports(request):
@@ -29,11 +29,12 @@ def process_crash_reports(request):
         # Create an in-memory file to represent the tar bytes
         request_data = request.get_data()
         tarfileobj = io.BytesIO(request_data)
-        
+
         # Open the tarfile and look for some identifying information
         hardware_model = None
         os_version = None
         number_of_crashes = 0
+        cr4shed = False
 
         with tarfile.open(fileobj=tarfileobj, mode="r:gz") as tar:
             number_of_crashes = len(tar.getmembers())
@@ -47,14 +48,25 @@ def process_crash_reports(request):
                 hardware_model = find_value_for_key(b"Hardware Model:", contents)
                 os_version = find_value_for_key(b"OS Version:", contents)
 
+                # Cr4shed format
+                device_infos = find_value_for_key(b"Device: ", contents)
+
+                if device_infos:
+                    hardware_model, os_version = device_infos.split(",-")
+                    cr4shed = True
+
                 if hardware_model and os_version:
                     break
+
+        hardware_model = hardware_model or "unknown_hw"
+        os_version = os_version or "unknown_os"
 
         print(f"saving {number_of_crashes} crashlogs from {hardware_model} {os_version}")
         storage_client = storage.Client(project=GCP_PROJECT)
         bucket = storage_client.get_bucket(CRASH_REPORT_BUCKET)
 
-        filename = f"{uuid.uuid1()}_{number_of_crashes}crashes.tar.gz"
+        marker = "cr4shes" if cr4shed else "crashes"
+        filename = f"{uuid.uuid1()}_{number_of_crashes}{marker}.tar.gz"
         crash_report_save_path = f"{os_version}/{hardware_model}/{filename}"
         blob = bucket.blob(crash_report_save_path)
 
