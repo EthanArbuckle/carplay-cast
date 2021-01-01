@@ -44,12 +44,17 @@ void writeSymbolicatedLogToFile(NSString *unsymbolicatedLogContents, NSString *o
     [symbolicatedLogContents writeToFile:outputPath atomically:NO encoding:NSUTF8StringEncoding error:nil];
 }
 
-void gatherUnsymbolicatedCrashlogs(NSString *outputDirectory)
+void gatherUnsymbolicatedCrashlogs(NSString *outputDirectory, NSArray *alreadyUploaded)
 {
     // Find unsymbolicated crash reports
     NSString *unsymbolicatedLogsPath = @"/var/mobile/Library/Logs/CrashReporter";
     for (NSString *file in [[NSFileManager defaultManager] contentsOfDirectoryAtPath:unsymbolicatedLogsPath error:nil])
     {
+        if ([alreadyUploaded containsObject:file])
+        {
+            continue;
+        }
+
         if (![[file pathExtension] isEqualToString:@"ips"])
         {
             continue;
@@ -78,16 +83,21 @@ void gatherUnsymbolicatedCrashlogs(NSString *outputDirectory)
             continue;
         }
 
-        NSString *outputFile = [NSString stringWithFormat:@"%@/%@.symbolicated", outputDirectory, file];
+        NSString *outputFile = [NSString stringWithFormat:@"%@/%@", outputDirectory, file];
         writeSymbolicatedLogToFile(crashlogContents, outputFile);
     }
 }
 
-void gatherCr4shedLogs(NSString *outputDirectory)
+void gatherCr4shedLogs(NSString *outputDirectory, NSArray *alreadyUploaded)
 {
     NSString *unsymbolicatedLogsPath = @"/var/mobile/Library/Cr4shed";
     for (NSString *file in [[NSFileManager defaultManager] contentsOfDirectoryAtPath:unsymbolicatedLogsPath error:nil])
     {
+        if ([alreadyUploaded containsObject:file])
+        {
+            continue;
+        }
+
         if (![[file pathExtension] isEqualToString:@"log"])
         {
             continue;
@@ -109,14 +119,14 @@ void gatherCr4shedLogs(NSString *outputDirectory)
             continue;
         }
 
-        // Skip the crash if the tweak wasn't injected in the process
+        // Skip the crash if the tweak wasn't responsible
         NSString *crashlogContents = [NSString stringWithContentsOfFile:fullPath encoding:NSUTF8StringEncoding error:nil];
-        if (![crashlogContents containsString:@"/Library/MobileSubstrate/DynamicLibraries/carplayenable.dylib"])
+        if (![crashlogContents containsString:@"Culprit: carplayenable.dylib"])
         {
             continue;
         }
 
-        NSString *outputFile = [NSString stringWithFormat:@"%@/%@.cr4shed", outputDirectory, file];
+        NSString *outputFile = [NSString stringWithFormat:@"%@/%@", outputDirectory, file];
         [[NSFileManager defaultManager] copyItemAtPath:fullPath toPath:outputFile error:nil];
     }
 }
@@ -131,11 +141,23 @@ void symbolicateAndUploadCrashlogs(void)
     }
     [[NSFileManager defaultManager] createDirectoryAtPath:crashReportsStash withIntermediateDirectories:NO attributes:nil error:NULL];
 
+    // Keep track of which logs have already been uploaded, to avoid duplicate work
+    NSMutableArray *uploadedLogFileNames = [[NSMutableArray alloc] init];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:UPLOADED_LOGS_PLIST_PATH])
+    {
+        uploadedLogFileNames = [[NSArray arrayWithContentsOfFile:UPLOADED_LOGS_PLIST_PATH] mutableCopy];
+    }
+
     // Gather logs from all sources
-    gatherUnsymbolicatedCrashlogs(crashReportsStash);
-    gatherCr4shedLogs(crashReportsStash);
+    gatherUnsymbolicatedCrashlogs(crashReportsStash, uploadedLogFileNames);
+    gatherCr4shedLogs(crashReportsStash, uploadedLogFileNames);
 
     NSArray *reports = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:crashReportsStash error:nil];
+    
+    // Update the uploaded-files cache
+    [uploadedLogFileNames addObjectsFromArray:reports];
+    [uploadedLogFileNames writeToFile:UPLOADED_LOGS_PLIST_PATH atomically:NO];
+
     if ([reports count] > 0)
     {
         // Archive them
