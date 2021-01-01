@@ -13,7 +13,7 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 
 after-carplayenable-stage::
 	mkdir -p $(THEOS_STAGING_DIR)/var/mobile/Library/Preferences/
-	cp BLACKLISTED_APPS.plist $(THEOS_STAGING_DIR)/var/mobile/Library/Preferences/com.ethanarbuckle.carplay-blacklisted-apps.plist
+	cp BLACKLISTED_APPS.plist $(THEOS_STAGING_DIR)/var/mobile/Library/Preferences/com.carplayenable.blacklisted-apps.plist
 
 after-install::
 	install.exec "killall -9 SpringBoard CarPlay"

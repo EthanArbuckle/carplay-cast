@@ -292,7 +292,7 @@ id getCarplayCADisplay(void)
             });
 
             // Ask the app to rotate to landscape
-            [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:appIdentifier userInfo:@{@"orientation": @(self.orientation)}];
+            [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.carplayenable.orientation" object:appIdentifier userInfo:@{@"orientation": @(self.orientation)}];
         });
     });
 
@@ -372,7 +372,7 @@ When a CarPlay App is closed
         // Notify the application process to stop enforcing an orientation lock
         int resetOrientationLock = -1;
         NSString *hostedIdentifier = getIvar(self.appViewController, @"_identifier");
-        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:hostedIdentifier userInfo:@{@"orientation": @(resetOrientationLock)}];
+        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.carplayenable.orientation" object:hostedIdentifier userInfo:@{@"orientation": @(resetOrientationLock)}];
 
         [self.rootWindow setHidden:YES];
         objcInvoke_1(self.appViewController, @"_setCurrentMode:", 0);
@@ -450,7 +450,7 @@ When the "rotate orientation" button is pressed on a CarplayEnabled app window
     id appScene = objcInvoke(objcInvoke([self appViewController], @"sceneHandle"), @"scene");
     NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
 
-    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable.orientation" object:sceneAppBundleID userInfo:@{@"orientation": @(desiredOrientation)}];
+    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.carplayenable.orientation" object:sceneAppBundleID userInfo:@{@"orientation": @(desiredOrientation)}];
     [self resizeAppViewForOrientation:desiredOrientation fullscreen:self.isFullscreen forceUpdate:NO];
 }
 

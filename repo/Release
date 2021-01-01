@@ -1,0 +1,8 @@
+Origin: repo.ghostbin
+Label: repo.ghostbin
+Suite: testing
+Version: 1.0
+Codename: repo.ghostbin
+Architectures: iphoneos-arm
+Components: main
+Description: repo.ghostbin

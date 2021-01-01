@@ -147,7 +147,7 @@ When an app is launched via Carplay dashboard
     {
         LOG_LIFECYCLE_EVENT;
         // Notify SpringBoard of the launch. SpringBoard will host the application + UI
-        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable" object:nil userInfo:@{@"identifier": objcInvoke(arg1, @"bundleIdentifier")}];
+        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.carplayenable" object:nil userInfo:@{@"identifier": objcInvoke(arg1, @"bundleIdentifier")}];
 
         // Add this item into the App History (so it shows up in the dock's "recents")
         id sharedApp = [UIApplication sharedApplication];
@@ -239,7 +239,7 @@ will launch their normal Carplay mode UI
         assertGotExpectedObject(icon, @"SBIcon");
         NSString *bundleID = objcInvoke(icon, @"applicationBundleID");
 
-        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.ethanarbuckle.carplayenable" object:nil userInfo:@{@"identifier": bundleID}];
+        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.carplayenable" object:nil userInfo:@{@"identifier": bundleID}];
 
         id sharedApp = [UIApplication sharedApplication];
         id appHistory = objcInvoke(sharedApp, @"_currentAppHistory");

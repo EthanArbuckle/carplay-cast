@@ -16,7 +16,7 @@ When the app is launched
 {
     id _self = %orig;
     // Register for "orientation change" notifications
-    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserver:_self selector:NSSelectorFromString(@"handleRotationRequest:") name:@"com.ethanarbuckle.carplayenable.orientation" object:[[NSBundle mainBundle] bundleIdentifier]];
+    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserver:_self selector:NSSelectorFromString(@"handleRotationRequest:") name:@"com.carplayenable.orientation" object:[[NSBundle mainBundle] bundleIdentifier]];
     return _self;
 }
 

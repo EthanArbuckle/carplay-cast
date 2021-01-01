@@ -13,7 +13,7 @@
     NSLog(@"LOG_LIFECYCLE_EVENT %@", func); \
 }
 
-#define BLACKLIST_PLIST_PATH @"/var/mobile/Library/Preferences/com.ethanarbuckle.carplay-blacklisted-apps.plist"
+#define BLACKLIST_PLIST_PATH @"/var/mobile/Library/Preferences/com.carplayenable.blacklisted-apps.plist"
 
 #define getIvar(object, ivar) [object valueForKey:ivar]
 #define setIvar(object, ivar, value) [object setValue:value forKey:ivar]
