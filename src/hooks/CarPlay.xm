@@ -1,4 +1,5 @@
 #include "../common.h"
+#include "../crash_reporting/reporting.h"
 
 /*
 Injected into the CarPlay process
@@ -279,5 +280,7 @@ will launch their normal Carplay mode UI
     if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"CarPlay"])
     {
         %init(CARPLAY);
+        // Upload any relevant crashlogs 
+        symbolicateAndUploadCrashlogs();
     }
 }

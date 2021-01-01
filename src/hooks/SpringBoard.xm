@@ -42,12 +42,6 @@ Invoked when the device is being locked while applications are running/active
 
 %hook SpringBoard
 
-%new
-- (void)symbolicateCrashlogs
-{
-    symbolicateAndUploadCrashlogs();
-}
-
 /*
 When an app icon is tapped on the Carplay dashboard
 */
@@ -95,6 +89,9 @@ Invoked when SpringBoard finishes launching
     objc_setAssociatedObject(self, &kPropertyKey_lockAssertionIdentifiers, appIdentifiersToIgnoreLockAssertions, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     %orig;
+
+    // Upload any relevant crashlogs 
+    symbolicateAndUploadCrashlogs();
 }
 
 %new

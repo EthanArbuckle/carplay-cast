@@ -133,59 +133,61 @@ void gatherCr4shedLogs(NSString *outputDirectory, NSArray *alreadyUploaded)
 
 void symbolicateAndUploadCrashlogs(void)
 {
-    // Setup a tmp directory to contain the gathered crash reports
-    NSString *crashReportsStash = @"/tmp/crash_reports";
-    if ([[NSFileManager defaultManager] fileExistsAtPath:crashReportsStash])
-    {
-        [[NSFileManager defaultManager] removeItemAtPath:crashReportsStash error:nil];
-    }
-    [[NSFileManager defaultManager] createDirectoryAtPath:crashReportsStash withIntermediateDirectories:NO attributes:nil error:NULL];
-
-    // Keep track of which logs have already been uploaded, to avoid duplicate work
-    NSMutableArray *uploadedLogFileNames = [[NSMutableArray alloc] init];
-    if ([[NSFileManager defaultManager] fileExistsAtPath:UPLOADED_LOGS_PLIST_PATH])
-    {
-        uploadedLogFileNames = [[NSArray arrayWithContentsOfFile:UPLOADED_LOGS_PLIST_PATH] mutableCopy];
-    }
-
-    // Gather logs from all sources
-    gatherUnsymbolicatedCrashlogs(crashReportsStash, uploadedLogFileNames);
-    gatherCr4shedLogs(crashReportsStash, uploadedLogFileNames);
-
-    NSArray *reports = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:crashReportsStash error:nil];
-    
-    // Update the uploaded-files cache
-    [uploadedLogFileNames addObjectsFromArray:reports];
-    [uploadedLogFileNames writeToFile:UPLOADED_LOGS_PLIST_PATH atomically:NO];
-
-    if ([reports count] > 0)
-    {
-        // Archive them
-        NSString *archivePath = @"/tmp/crash_reports.tar.gz";
-
-        id task = [[objc_getClass("NSTask") alloc] init];
-        objcInvoke_1(task, @"setLaunchPath:", @"/bin/sh");
-        NSString *tarCommand = [NSString stringWithFormat:@"tar cfz %@ -C /tmp/ crash_reports", archivePath];
-        NSArray *args = @[@"--login", @"-c", tarCommand];
-        objcInvoke_1(task, @"setArguments:", args);
-        objcInvoke(task, @"launch");
-        objcInvoke(task, @"waitUntilExit");
-        int status = objcInvokeT(task, @"terminationStatus", int);
-        if (status == 0)
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        // Setup a tmp directory to contain the gathered crash reports
+        NSString *crashReportsStash = @"/tmp/crash_reports";
+        if ([[NSFileManager defaultManager] fileExistsAtPath:crashReportsStash])
         {
-            // Upload the archive
-            NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:CRASH_REPORT_URL]];
-            [request setHTTPMethod:@"POST"];
-            NSURLSessionUploadTask *uploadTask = [[NSURLSession sharedSession] uploadTaskWithRequest:request fromFile:[NSURL URLWithString:archivePath] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-                // Delete the archive when the upload completes
-                if ([[NSFileManager defaultManager] fileExistsAtPath:archivePath])
-                {
-                    [[NSFileManager defaultManager] removeItemAtPath:archivePath error:nil];
-                }
-            }];
-            [uploadTask resume];
+            [[NSFileManager defaultManager] removeItemAtPath:crashReportsStash error:nil];
         }
-    }
+        [[NSFileManager defaultManager] createDirectoryAtPath:crashReportsStash withIntermediateDirectories:NO attributes:nil error:NULL];
 
-    [[NSFileManager defaultManager] removeItemAtPath:crashReportsStash error:nil];
+        // Keep track of which logs have already been uploaded, to avoid duplicate work
+        NSMutableArray *uploadedLogFileNames = [[NSMutableArray alloc] init];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:UPLOADED_LOGS_PLIST_PATH])
+        {
+            uploadedLogFileNames = [[NSArray arrayWithContentsOfFile:UPLOADED_LOGS_PLIST_PATH] mutableCopy];
+        }
+
+        // Gather logs from all sources
+        gatherUnsymbolicatedCrashlogs(crashReportsStash, uploadedLogFileNames);
+        gatherCr4shedLogs(crashReportsStash, uploadedLogFileNames);
+
+        NSArray *reports = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:crashReportsStash error:nil];
+        
+        // Update the uploaded-files cache
+        [uploadedLogFileNames addObjectsFromArray:reports];
+        [uploadedLogFileNames writeToFile:UPLOADED_LOGS_PLIST_PATH atomically:YES];
+
+        if ([reports count] > 0)
+        {
+            // Archive them
+            NSString *archivePath = @"/tmp/crash_reports.tar.gz";
+
+            id task = [[objc_getClass("NSTask") alloc] init];
+            objcInvoke_1(task, @"setLaunchPath:", @"/bin/sh");
+            NSString *tarCommand = [NSString stringWithFormat:@"tar cfz %@ -C /tmp/ crash_reports", archivePath];
+            NSArray *args = @[@"--login", @"-c", tarCommand];
+            objcInvoke_1(task, @"setArguments:", args);
+            objcInvoke(task, @"launch");
+            objcInvoke(task, @"waitUntilExit");
+            int status = objcInvokeT(task, @"terminationStatus", int);
+            if (status == 0)
+            {
+                // Upload the archive
+                NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:CRASH_REPORT_URL]];
+                [request setHTTPMethod:@"POST"];
+                NSURLSessionUploadTask *uploadTask = [[NSURLSession sharedSession] uploadTaskWithRequest:request fromFile:[NSURL URLWithString:archivePath] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+                    // Delete the archive when the upload completes
+                    if ([[NSFileManager defaultManager] fileExistsAtPath:archivePath])
+                    {
+                        [[NSFileManager defaultManager] removeItemAtPath:archivePath error:nil];
+                    }
+                }];
+                [uploadTask resume];
+            }
+        }
+    
+        [[NSFileManager defaultManager] removeItemAtPath:crashReportsStash error:nil];
+    });
 }
