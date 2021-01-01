@@ -1,11 +1,11 @@
-import subprocess
-from typing import Optional
-import sys
-from pathlib import Path
-import hashlib
-import tempfile
 import gzip
-
+import hashlib
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Optional
 
 REPO_IP_ADDRESS = "206.189.219.64"
 REPO_PATH = "/var/www/repo.ghostbin.co"
@@ -38,10 +38,10 @@ def run(deb_to_upload: Path) -> None:
     # Upload the Release file
     release_file_path = Path(__file__).parent / "Release"
     send_file(release_file_path.as_posix(), "Release")
-    
+
     # Generate the Package info
     package_info = run_local_command(f"dpkg -I {deb_to_upload.as_posix()} control")
-    
+
     # Generate hashes and add them to package info
     with open(deb_to_upload.as_posix(), mode="rb") as debf:
         deb_contents = debf.read()
@@ -58,10 +58,9 @@ def run(deb_to_upload: Path) -> None:
     # Add deb name to package file
     remote_deb_location = f"debs/{deb_to_upload.name}"
     package_info += f"Filename: {remote_deb_location}\n"
-    
+
     # Gzip package file and upload
-    # with tempfile.NamedTemporaryFile(mode="wb") as packagef
-    with open("Packages.gz", mode="wb") as packagef, gzip.GzipFile(fileobj=packagef, mode="wb") as gzout:
+    with tempfile.NamedTemporaryFile(mode="wb", delete=False) as packagef, gzip.GzipFile(fileobj=packagef, mode="wb") as gzout:
         # Write contents to temp file
         gzout.write(package_info.encode("utf-8"))
         gzout.flush()
@@ -69,6 +68,7 @@ def run(deb_to_upload: Path) -> None:
         packagef.close()
         # Send to server
         send_file(packagef.name, "Packages.gz")
+        os.remove(packagef.name)
 
     # Upload deb
     send_file(deb_to_upload.as_posix(), remote_deb_location)
@@ -80,6 +80,6 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 2 or ".deb" not in sys.argv[1]:
         raise Exception("No deb provided")
-    
+
     provided_deb = Path(sys.argv[1])
     run(provided_deb)
