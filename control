@@ -1,7 +1,7 @@
 Package: com.cortex.carplayenable
 Name: carplayenable
 Depends: mobilesubstrate
-Version: 0.1.0
+Version: 0.0.1
 Architecture: iphoneos-arm
 Description: Use any app with CarPlay
 Maintainer: Cortex
