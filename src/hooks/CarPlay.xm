@@ -179,7 +179,7 @@ When an app is launched via Carplay dashboard
 
         return nil;
     }
-    
+
     return %orig;
 }
 
@@ -277,10 +277,12 @@ will launch their normal Carplay mode UI
 
 %ctor
 {
+    BAIL_IF_UNSUPPORTED_IOS;
+
     if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"CarPlay"])
     {
         %init(CARPLAY);
-        // Upload any relevant crashlogs 
+        // Upload any relevant crashlogs
         symbolicateAndUploadCrashlogs();
     }
 }

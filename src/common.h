@@ -3,6 +3,13 @@
 #include <objc/message.h>
 #include <dlfcn.h>
 
+#define BAIL_IF_UNSUPPORTED_IOS { \
+    if ([[[UIDevice currentDevice] systemVersion] compare:@"14.0" options:NSNumericSearch] == NSOrderedAscending) \
+    { \
+        return; \
+    } \
+}
+
 #define LOG_LIFECYCLE_EVENT { \
     NSString *func = [NSString stringWithFormat:@"%s", __func__]; \
     if ([func containsString:@"_method$"]) \

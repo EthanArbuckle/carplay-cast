@@ -412,6 +412,8 @@ int hook_BKSDisplayServicesSetScreenBlanked(int arg1)
 
 %ctor
 {
+    BAIL_IF_UNSUPPORTED_IOS;
+
     if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"SpringBoard"])
     {
         %init(SPRINGBOARD);
