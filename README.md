@@ -22,7 +22,9 @@ CarPlay Cast does not work with apps that use DRM
 ## FAQ
 
 Q: Can I watch YouTube?
+
 A: Yes!
 
 Q: Can I watch Netflix?
+
 A: No, Netflix uses DRM to prevent casting of their content.
