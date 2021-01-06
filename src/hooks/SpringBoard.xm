@@ -65,7 +65,7 @@ When an app icon is tapped on the Carplay dashboard
         {
             objcInvoke(liveCarplayWindow, @"dismiss");
         }
-        
+
         // Launch the requested app
         liveCarplayWindow = [[CRCarPlayWindow alloc] initWithBundleIdentifier:identifier];
         objc_setAssociatedObject(self, &kPropertyKey_liveCarplayWindow, liveCarplayWindow, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -85,12 +85,15 @@ Invoked when SpringBoard finishes launching
     // Setup to receive App Launch notifications from the CarPlay process
     [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserver:self selector:NSSelectorFromString(@"handleCarPlayLaunchNotification:") name:@"com.carplayenable" object:nil];
 
+    // Receive notifications for Carplay connect/disconnect events. When a Carplay screen becomes unavailable while an app is being hosted on it, that app window needs to be closed
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(uiscreenDidDisconnect) name:@"CarPlayIsConnectedDidChange" object:nil];
+
     NSMutableArray *appIdentifiersToIgnoreLockAssertions = [[NSMutableArray alloc] init];
     objc_setAssociatedObject(self, &kPropertyKey_lockAssertionIdentifiers, appIdentifiersToIgnoreLockAssertions, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     %orig;
 
-    // Upload any relevant crashlogs 
+    // Upload any relevant crashlogs
     symbolicateAndUploadCrashlogs();
 }
 
@@ -98,6 +101,23 @@ Invoked when SpringBoard finishes launching
 - (id)liveCarplayWindow
 {
     return objc_getAssociatedObject(self, &kPropertyKey_liveCarplayWindow);
+}
+
+/*
+A Carplay connected/disconnected event
+*/
+%new
+- (void)uiscreenDidDisconnect
+{
+    LOG_LIFECYCLE_EVENT;
+    // If a window is being hosted, and the carplay UIScreen disconnected, close the window
+    id liveCarplayWindow = objcInvoke(self, @"liveCarplayWindow");
+    if (liveCarplayWindow && !getCarplayCADisplay())
+    {
+        dispatch_sync(dispatch_get_main_queue(), ^(void) {
+            objcInvoke(liveCarplayWindow, @"dismiss");
+        });
+    }
 }
 
 %end

@@ -1,5 +1,7 @@
 #include <UIKit/UIKit.h>
 
+id getCarplayCADisplay(void);
+
 @interface CRCarPlayWindow : NSObject
 
 @property (nonatomic, retain) UIWindow *rootWindow;
