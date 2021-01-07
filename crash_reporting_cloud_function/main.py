@@ -7,6 +7,7 @@ from google.cloud import storage
 CRASH_REPORT_BUCKET = "crash-reports"
 GCP_PROJECT = "decoded-cove-239422"
 
+
 def find_value_for_key(key: bytes, contents: bytes) -> str:
     for content_line in contents.split(b"\n"):
         if key in content_line:

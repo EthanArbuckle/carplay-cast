@@ -16,12 +16,14 @@ def run_local_command(command: str) -> Optional[str]:
     output = subprocess.check_output(command, shell=True)
     return output.decode("utf-8") if output else None
 
+
 def run_remote_command(command: str) -> Optional[str]:
-    full_command = f"ssh root@{REPO_IP_ADDRESS} \"{command}\""
+    full_command = f'ssh root@{REPO_IP_ADDRESS} "{command}"'
     return run_local_command(full_command)
 
+
 def send_file(local_file: str, remote_path: str) -> None:
-    run_local_command(f"scp \"{local_file}\" root@{REPO_IP_ADDRESS}:\"{REPO_PATH}/{remote_path}\"")
+    run_local_command(f'scp "{local_file}" root@{REPO_IP_ADDRESS}:"{REPO_PATH}/{remote_path}"')
 
 
 def run(deb_to_upload: Path) -> None:
@@ -60,7 +62,9 @@ def run(deb_to_upload: Path) -> None:
     package_info += f"Filename: {remote_deb_location}\n"
 
     # Gzip package file and upload
-    with tempfile.NamedTemporaryFile(mode="wb", delete=False) as packagef, gzip.GzipFile(fileobj=packagef, mode="wb") as gzout:
+    with tempfile.NamedTemporaryFile(mode="wb", delete=False) as packagef, gzip.GzipFile(
+        fileobj=packagef, mode="wb"
+    ) as gzout:
         # Write contents to temp file
         gzout.write(package_info.encode("utf-8"))
         gzout.flush()
