@@ -86,7 +86,7 @@ Invoked when SpringBoard finishes launching
     [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserver:self selector:NSSelectorFromString(@"handleCarPlayLaunchNotification:") name:@"com.carplayenable" object:nil];
 
     // Receive notifications for Carplay connect/disconnect events. When a Carplay screen becomes unavailable while an app is being hosted on it, that app window needs to be closed
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(uiscreenDidDisconnect) name:@"CarPlayIsConnectedDidChange" object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(carplayIsConnectedChanged) name:@"CarPlayIsConnectedDidChange" object:nil];
 
     NSMutableArray *appIdentifiersToIgnoreLockAssertions = [[NSMutableArray alloc] init];
     objc_setAssociatedObject(self, &kPropertyKey_lockAssertionIdentifiers, appIdentifiersToIgnoreLockAssertions, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -107,10 +107,10 @@ Invoked when SpringBoard finishes launching
 A Carplay connected/disconnected event
 */
 %new
-- (void)uiscreenDidDisconnect
+- (void)carplayIsConnectedChanged
 {
     LOG_LIFECYCLE_EVENT;
-    // If a window is being hosted, and the carplay UIScreen disconnected, close the window
+    // If a window is being hosted, and the carplay radio disconnected, close the window
     id liveCarplayWindow = objcInvoke(self, @"liveCarplayWindow");
     if (liveCarplayWindow && !getCarplayCADisplay())
     {
