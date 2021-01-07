@@ -280,7 +280,11 @@ id getCarplayCADisplay(void)
                 {
                     // Now that the app is launched and presumably in landscape mode, save a snapshot.
                     // If an app does not natively support landscape mode and doesn't ship a landscape launch image, this snapshot can be used during cold-launches
-                    id appScene = objcInvoke(sceneHandle, @"scene");
+                    id appScene = objcInvoke(sceneHandle, @"sceneIfExists");
+                    if (!appScene)
+                    {
+                        return;
+                    }
                     id sceneSettings = objcInvoke(appScene, @"mutableSettings");
                     objcInvoke_1(sceneSettings, @"setInterfaceOrientation:", self.orientation);
                     id snapshotContext = objcInvoke_2(objc_getClass("FBSSceneSnapshotContext"), @"contextWithSceneID:settings:", objcInvoke(appScene, @"identifier"), sceneSettings);
