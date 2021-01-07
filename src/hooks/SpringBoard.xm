@@ -414,7 +414,7 @@ int hook_BKSDisplayServicesSetScreenBlanked(int arg1)
 {
     BAIL_IF_UNSUPPORTED_IOS;
 
-    if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"SpringBoard"])
+    if ([[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.springboard"])
     {
         %init(SPRINGBOARD);
         // Hook BKSDisplayServicesSetScreenBlanked() - necessary for allowing animations/video when the screen is off

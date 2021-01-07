@@ -279,7 +279,7 @@ will launch their normal Carplay mode UI
 {
     BAIL_IF_UNSUPPORTED_IOS;
 
-    if ([[[NSProcessInfo processInfo] processName] isEqualToString:@"CarPlay"])
+    if ([[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.CarPlayApp"])
     {
         %init(CARPLAY);
         // Upload any relevant crashlogs
