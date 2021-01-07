@@ -447,7 +447,13 @@ When the "rotate orientation" button is pressed on a CarplayEnabled app window
     LOG_LIFECYCLE_EVENT;
     int desiredOrientation = (UIInterfaceOrientationIsLandscape(self.orientation)) ? 1 : 3;
 
-    id appScene = objcInvoke(objcInvoke([self appViewController], @"sceneHandle"), @"scene");
+    id appScene = objcInvoke(objcInvoke([self appViewController], @"sceneHandle"), @"sceneIfExists");
+    if (!appScene)
+    {
+        // The scene doesn't exist - maybe the app hasn't finished launching yet
+        return;
+    }
+
     NSString *sceneAppBundleID = objcInvoke(objcInvoke(objcInvoke(appScene, @"client"), @"process"), @"bundleIdentifier");
 
     [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotificationName:@"com.carplayenable.orientation" object:sceneAppBundleID userInfo:@{@"orientation": @(desiredOrientation)}];
@@ -483,7 +489,7 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
             }
         }
     }
-    
+
     assertGotExpectedObject(targetScreen, @"UIScreen");
 
     CGRect carplayDisplayBounds = [targetScreen bounds];
