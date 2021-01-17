@@ -31,14 +31,18 @@ void addCarplayDeclarationsToAppLibrary(id appLibrary)
     {
         if (getIvar(appInfo, @"_carPlayDeclaration") == nil)
         {
-            // Skip system apps
+            NSString *appBundleID = objcInvoke(appInfo, @"bundleIdentifier");
+            // Skip system apps if the identifier contains "apple". The intention is to exclude all System/Stock apps, but jailbroken apps (Kodi) are
+            // considered "System", so looking at the identifier is necessary
             if ([objcInvoke(appInfo, @"bundleType") isEqualToString:@"User"] == NO)
             {
-                continue;
+                if ([appBundleID containsString:@"com.apple."])
+                {
+                    continue;
+                }
             }
 
             // Skip if blacklisted
-            NSString *appBundleID = objcInvoke(appInfo, @"bundleIdentifier");
             if (blacklistedIdentifiers && [blacklistedIdentifiers containsObject:appBundleID])
             {
                 continue;
