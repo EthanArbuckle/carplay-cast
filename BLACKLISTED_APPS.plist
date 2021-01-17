@@ -3,5 +3,7 @@
 <plist version="1.0">
  <array>
   <string>com.netflix.Netflix</string>
+  <string>com.hulu.plus</string>
+  <string>com.amazon.aiv.AIVApp</string>
  </array>
 </plist>
