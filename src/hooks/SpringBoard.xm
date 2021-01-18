@@ -112,9 +112,14 @@ Invoked when SpringBoard finishes launching
                 continue;
             }
 
+            // Grab icon data
+            UIImage *appIconImage = objcInvoke_3(objc_getClass("UIImage"), @"_applicationIconImageForBundleIdentifier:format:scale:", identifier, 0, [UIScreen mainScreen].scale);
+            NSData *iconImageData = UIImagePNGRepresentation(appIconImage);
+
             NSDictionary *appInfoDict = @{
                 @"name": objcInvoke(appInfo, @"displayName"),
-                @"bundleID": identifier
+                @"bundleID": identifier,
+                @"iconImage": iconImageData
             };
             [appList addObject:appInfoDict];
 

@@ -99,9 +99,11 @@
 	NSDictionary *currentApp = _appList[indexPath.row];
 	NSString *appName = currentApp[@"name"];
 	NSString *appIdentifier = currentApp[@"bundleID"];
+	UIImage *appIcon = [UIImage imageWithData:currentApp[@"iconImage"]];
 
 	// Setup the cell
 	[[cell textLabel] setText:appName];
+	[[cell imageView] setImage:appIcon];
 	if ([self isAppCarplayEnabled:appIdentifier])
 	{
 		[cell setAccessoryType:UITableViewCellAccessoryCheckmark];
