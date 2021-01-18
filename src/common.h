@@ -20,8 +20,6 @@
     NSLog(@"LOG_LIFECYCLE_EVENT %@", func); \
 }
 
-#define BLACKLIST_PLIST_PATH @"/var/mobile/Library/Preferences/com.carplayenable.blacklisted-apps.plist"
-
 #define getIvar(object, ivar) [object valueForKey:ivar]
 #define setIvar(object, ivar, value) [object setValue:value forKey:ivar]
 
@@ -36,6 +34,16 @@
 #define kPropertyKey_liveCarplayWindow *NSSelectorFromString(@"liveCarplayWindow")
 #define kPropertyKey_lockAssertionIdentifiers *NSSelectorFromString(@"lockAssertions")
 static char *kPropertyKey_didDrawPlaceholder;
+
+// Preferences
+#define PREFERENCES_PLIST_PATH @"/var/mobile/Library/Preferences/com.carplayenable.preferences.plist"
+#define PREFERENCES_CHANGED_NOTIFICATION @"com.carplay.preferences.changed"
+#define PREFERENCES_APP_DATA_NOTIFICATION @"com.carplay.prefs.app_data"
+#define kPrefsAppDataRequesting @"Requesting"
+#define kPrefsAppDataReceiving @"Receiving"
+#define kPrefsAppLibraryChanged @"appLibrary"
+
+#define BLACKLIST_PLIST_PATH @"/var/mobile/Library/Preferences/com.carplayenable.blacklisted-apps.plist"
 
 #define CARPLAY_DOCK_WIDTH 40
 

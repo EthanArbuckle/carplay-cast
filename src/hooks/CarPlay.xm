@@ -27,6 +27,16 @@ void addCarplayDeclarationsToAppLibrary(id appLibrary)
         blacklistedIdentifiers = [NSArray arrayWithContentsOfFile:BLACKLIST_PLIST_PATH];
     }
 
+    // Load exluded apps from user's preferences
+    if ([[NSFileManager defaultManager] fileExistsAtPath:PREFERENCES_PLIST_PATH])
+    {
+        NSDictionary *prefs = [[NSDictionary alloc] initWithContentsOfFile:PREFERENCES_PLIST_PATH];
+        if ([prefs valueForKey:@"excludedApps"])
+        {
+            blacklistedIdentifiers = [blacklistedIdentifiers arrayByAddingObjectsFromArray:[prefs valueForKey:@"excludedApps"]];
+        }
+    }
+
     for (id appInfo in objcInvoke(appLibrary, @"allInstalledApplications"))
     {
         if (getIvar(appInfo, @"_carPlayDeclaration") == nil)
@@ -216,6 +226,21 @@ Called when an app is installed or uninstalled.
 Used for adding "carplay declaration" to newly installed apps so they appear on the dashboard
 */
 %hook _CARDashboardHomeViewController
+
+- (id)initWithEnvironment:(id)arg1
+{
+    id _self = %orig;
+    // Register for Preference Changed notifications
+    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserverForName:PREFERENCES_CHANGED_NOTIFICATION object:kPrefsAppLibraryChanged queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+        
+        // Reload app library - in case apps were added/removed
+        id updatedLibrary = objcInvoke(objc_getClass("CARApplication"), @"_newApplicationLibrary");
+        objcInvoke_1(self, @"setLibrary:", updatedLibrary);
+        objcInvoke(self, @"_handleAppLibraryRefresh");
+    }];
+
+    return _self;
+}
 
 - (void)_handleAppLibraryRefresh
 {

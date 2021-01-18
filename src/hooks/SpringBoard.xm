@@ -93,6 +93,36 @@ Invoked when SpringBoard finishes launching
 
     %orig;
 
+    NSOperationQueue *notificationQueue = [[NSOperationQueue alloc] init];
+    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserverForName:PREFERENCES_APP_DATA_NOTIFICATION object:kPrefsAppDataRequesting queue:notificationQueue usingBlock:^(NSNotification * _Nonnull note) {
+        // The Preference pane is requesting a list of installed apps + icons. Gather the info
+        id appController = objcInvoke(objc_getClass("SBApplicationController"), @"sharedInstance");
+        NSMutableArray *appList = [[NSMutableArray alloc] init];
+        for (id appInfo in objcInvoke(appController, @"allInstalledApplications"))
+        {
+            NSString *identifier = objcInvoke(appInfo, @"bundleIdentifier");
+            // Skip stock apps
+            if (![objcInvoke(appInfo, @"bundleType") isEqualToString:@"User"] && [identifier containsString:@"com.apple."])
+            {
+                continue;
+            }
+            // Skip native-carplay apps
+            if (getIvar(appInfo, @"_carPlayDeclaration") != nil)
+            {
+                continue;
+            }
+
+            NSDictionary *appInfoDict = @{
+                @"name": objcInvoke(appInfo, @"displayName"),
+                @"bundleID": identifier
+            };
+            [appList addObject:appInfoDict];
+
+        }
+        NSDictionary *replyDict = @{@"appList": appList};
+        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotification:[NSNotification notificationWithName:PREFERENCES_APP_DATA_NOTIFICATION object:kPrefsAppDataReceiving userInfo:replyDict]];
+    }];
+
     // Upload any relevant crashlogs
     symbolicateAndUploadCrashlogs();
 }
@@ -420,5 +450,14 @@ int hook_BKSDisplayServicesSetScreenBlanked(int arg1)
         // Hook BKSDisplayServicesSetScreenBlanked() - necessary for allowing animations/video when the screen is off
         void *_BKSDisplayServicesSetScreenBlanked = dlsym(dlopen(NULL, 0), "BKSDisplayServicesSetScreenBlanked");
         MSHookFunction(_BKSDisplayServicesSetScreenBlanked, (void *)hook_BKSDisplayServicesSetScreenBlanked, (void **)&orig_BKSDisplayServicesSetScreenBlanked);
+
+        // Write default preference values if needed
+        if (![[NSFileManager defaultManager] fileExistsAtPath:PREFERENCES_PLIST_PATH])
+        {
+            NSDictionary *preferences = @{
+                @"excludedApps": @[],
+            };
+            [preferences writeToFile:PREFERENCES_PLIST_PATH atomically:NO];
+        }
     }
 }

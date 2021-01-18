@@ -17,8 +17,12 @@ after-carplayenable-stage::
 	cp BLACKLISTED_APPS.plist $(THEOS_STAGING_DIR)/var/mobile/Library/Preferences/com.carplayenable.blacklisted-apps.plist
 
 after-install::
-	install.exec "killall -9 SpringBoard CarPlay"
+	install.exec "killall -9 SpringBoard CarPlay Preferences"
 
 test::
 	install.exec "cycript -p SpringBoard" < tests/springboard_tests.cy
 	install.exec "cycript -p CarPlay" < tests/carplay_tests.cy
+
+SUBPROJECTS += carplayenableprefs
+
+include $(THEOS_MAKE_PATH)/aggregate.mk
