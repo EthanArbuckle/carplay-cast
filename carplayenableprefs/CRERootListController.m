@@ -19,7 +19,13 @@
 		[[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserverForName:PREFERENCES_APP_DATA_NOTIFICATION object:kPrefsAppDataReceiving queue:notificationQueue usingBlock:^(NSNotification * _Nonnull note) {
 			NSDictionary *data = [note userInfo];
 			// Create AppList controller
-			_appListController = [[CPAppListController alloc] initWithAppList:data[@"appList"]];
+			NSArray *appList = data[@"appList"];
+			if (appList)
+			{
+				dispatch_sync(dispatch_get_main_queue(), ^(void) {
+					_appListController = [[CPAppListController alloc] initWithAppList:appList];
+				});
+			}
 	    }];
 
 		// Ask Springboard for the app data. This may have a little delay, so its being fetched before the user opens the App List controller
@@ -36,7 +42,7 @@
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
 {
-	return 1;
+	return 2;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
@@ -82,7 +88,16 @@
 		else if (indexPath.row == 2)
 		{
 			[[cell textLabel] setText:@"Auto"];
+			
+		}
+
+		if (indexPath.row == [[CRPreferences sharedInstance] dockAlignment])
+		{
 			[cell setAccessoryType:UITableViewCellAccessoryCheckmark];
+		}
+		else
+		{
+			[cell setAccessoryType:UITableViewCellAccessoryNone];
 		}
 	}
 	
@@ -108,7 +123,7 @@
 	switch (section)
 	{
 		case 0:
-			//return @"";
+			return @"";
 		case 1:
 			return @"Created by Ethan Arbuckle";
 		default:
@@ -133,11 +148,18 @@
 			break;
 		}
 		case 1:
+		{
+			// Save the new setting
+			[[CRPreferences sharedInstance] updateValue:@(indexPath.row) forPreferenceKey:@"dockAlignment"];
+			// Notify CarPlay of the changes
+			[[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotification:[NSNotification notificationWithName:PREFERENCES_CHANGED_NOTIFICATION object:kPrefsDockAlignmentChanged]];
 			break;
+		}
 		default:
 			break;
 	}
 
+	[_rootTable reloadData];
 	[tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 

@@ -2,6 +2,7 @@
 #include <UIKit/UIKit.h>
 #include <objc/message.h>
 #include <dlfcn.h>
+#include "CRPreferences.h"
 
 #define BAIL_IF_UNSUPPORTED_IOS { \
     if ([[[UIDevice currentDevice] systemVersion] compare:@"14.0" options:NSNumericSearch] == NSOrderedAscending) \
@@ -42,6 +43,7 @@ static char *kPropertyKey_didDrawPlaceholder;
 #define kPrefsAppDataRequesting @"Requesting"
 #define kPrefsAppDataReceiving @"Receiving"
 #define kPrefsAppLibraryChanged @"appLibrary"
+#define kPrefsDockAlignmentChanged @"dockAlignment"
 
 #define BLACKLIST_PLIST_PATH @"/var/mobile/Library/Preferences/com.carplayenable.blacklisted-apps.plist"
 

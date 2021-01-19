@@ -12,6 +12,7 @@ id getCarplayCADisplay(void);
 @property (nonatomic, retain) id appViewController;
 @property (nonatomic, retain) id sceneMonitor;
 @property (nonatomic, retain) id application;
+@property (nonatomic, retain) NSMutableArray *observers;
 
 @property (nonatomic) int orientation;
 @property (nonatomic) BOOL isFullscreen;

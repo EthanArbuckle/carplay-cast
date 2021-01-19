@@ -13,8 +13,6 @@
 		NSArray *sortDescriptors = [NSArray arrayWithObject:nameDescriptor];
 		_appList = [appList sortedArrayUsingDescriptors:sortDescriptors];
 
-		[self reloadPreferences];
-
 		_rootTable = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, [[UIScreen mainScreen] bounds].size.width, [[UIScreen mainScreen] bounds].size.height) style:UITableViewStyleGrouped];
 		[_rootTable setDelegate:self];
 		[_rootTable setDataSource:self];
@@ -24,39 +22,15 @@
 	return self;
 }
 
-- (void)reloadPreferences
-{
-	if ([[NSFileManager defaultManager] fileExistsAtPath:PREFERENCES_PLIST_PATH])
-	{
-		_cachedPreferences = [[NSDictionary alloc] initWithContentsOfFile:PREFERENCES_PLIST_PATH];
-	}
-	else {
-		_cachedPreferences = @{};
-	}
-}
-
 - (BOOL)isAppCarplayEnabled:(NSString *)identifier
-{	
-	if (_cachedPreferences && [_cachedPreferences valueForKey:@"excludedApps"])
-	{
-		NSArray *excludedIdentifiers = _cachedPreferences[@"excludedApps"];
-		return [excludedIdentifiers containsObject:identifier] == NO;
-	}
-
-	return YES;
+{
+	NSArray *excludedApps = [[CRPreferences sharedInstance] excludedApplications];
+	return [excludedApps containsObject:identifier] == NO;
 }
 
 - (void)setApp:(NSString *)identifier shouldBeExcluded:(BOOL)shouldExclude
 {
-	NSMutableArray *excludedApps;
-	if (_cachedPreferences && [_cachedPreferences valueForKey:@"excludedApps"])
-	{
-		excludedApps = [_cachedPreferences[@"excludedApps"] mutableCopy];
-	}
-	else
-	{
-		excludedApps = [[NSMutableArray alloc] init];
-	}
+	NSMutableArray *excludedApps = [[[CRPreferences sharedInstance] excludedApplications] mutableCopy];
 
 	BOOL alreadyExcluded = [excludedApps containsObject:identifier];
 	if (shouldExclude && !alreadyExcluded)
@@ -68,10 +42,7 @@
 		[excludedApps removeObject:identifier];
 	}
 
-	NSMutableDictionary *updatedPrefs = [_cachedPreferences mutableCopy];
-	updatedPrefs[@"excludedApps"] = excludedApps;
-	_cachedPreferences = updatedPrefs;
-	[_cachedPreferences writeToFile:PREFERENCES_PLIST_PATH atomically:NO];
+	[[CRPreferences sharedInstance] updateValue:excludedApps forPreferenceKey:@"excludedApps"];
 
 	// Notify CarPlay of the changes
 	[[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotification:[NSNotification notificationWithName:PREFERENCES_CHANGED_NOTIFICATION object:kPrefsAppLibraryChanged]];

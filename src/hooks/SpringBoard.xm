@@ -455,14 +455,5 @@ int hook_BKSDisplayServicesSetScreenBlanked(int arg1)
         // Hook BKSDisplayServicesSetScreenBlanked() - necessary for allowing animations/video when the screen is off
         void *_BKSDisplayServicesSetScreenBlanked = dlsym(dlopen(NULL, 0), "BKSDisplayServicesSetScreenBlanked");
         MSHookFunction(_BKSDisplayServicesSetScreenBlanked, (void *)hook_BKSDisplayServicesSetScreenBlanked, (void **)&orig_BKSDisplayServicesSetScreenBlanked);
-
-        // Write default preference values if needed
-        if (![[NSFileManager defaultManager] fileExistsAtPath:PREFERENCES_PLIST_PATH])
-        {
-            NSDictionary *preferences = @{
-                @"excludedApps": @[],
-            };
-            [preferences writeToFile:PREFERENCES_PLIST_PATH atomically:NO];
-        }
     }
 }

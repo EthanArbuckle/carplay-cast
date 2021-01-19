@@ -4,7 +4,6 @@
 
 @property (nonatomic, retain) UITableView *rootTable;
 @property (nonatomic, retain) NSArray *appList;
-@property (nonatomic, retain) NSDictionary *cachedPreferences;
 
 - (id)initWithAppList:(NSArray *)appList;
 

@@ -5,7 +5,7 @@ include $(THEOS)/makefiles/common.mk
 
 BUNDLE_NAME = carplayenableprefs
 
-carplayenableprefs_FILES = $(wildcard *.m)
+carplayenableprefs_FILES = $(wildcard *.m) ../src/CRPreferences.mm
 carplayenableprefs_INSTALL_PATH = /Library/PreferenceBundles
 carplayenableprefs_FRAMEWORKS = UIKit
 carplayenableprefs_PRIVATE_FRAMEWORKS = Preferences

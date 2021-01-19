@@ -1,5 +1,5 @@
-#include "../common.h"
 #include "../crash_reporting/reporting.h"
+#include "../common.h"
 
 /*
 Injected into the CarPlay process
@@ -28,14 +28,8 @@ void addCarplayDeclarationsToAppLibrary(id appLibrary)
     }
 
     // Load exluded apps from user's preferences
-    if ([[NSFileManager defaultManager] fileExistsAtPath:PREFERENCES_PLIST_PATH])
-    {
-        NSDictionary *prefs = [[NSDictionary alloc] initWithContentsOfFile:PREFERENCES_PLIST_PATH];
-        if ([prefs valueForKey:@"excludedApps"])
-        {
-            blacklistedIdentifiers = [blacklistedIdentifiers arrayByAddingObjectsFromArray:[prefs valueForKey:@"excludedApps"]];
-        }
-    }
+    NSArray *userExcludedApps = [[CRPreferences sharedInstance] excludedApplications];
+    blacklistedIdentifiers = [blacklistedIdentifiers arrayByAddingObjectsFromArray:userExcludedApps];
 
     for (id appInfo in objcInvoke(appLibrary, @"allInstalledApplications"))
     {
@@ -232,7 +226,7 @@ Used for adding "carplay declaration" to newly installed apps so they appear on 
     id _self = %orig;
     // Register for Preference Changed notifications
     [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserverForName:PREFERENCES_CHANGED_NOTIFICATION object:kPrefsAppLibraryChanged queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
-        
+        [[CRPreferences sharedInstance] reloadPreferences];
         // Reload app library - in case apps were added/removed
         id updatedLibrary = objcInvoke(objc_getClass("CARApplication"), @"_newApplicationLibrary");
         objcInvoke_1(self, @"setLibrary:", updatedLibrary);

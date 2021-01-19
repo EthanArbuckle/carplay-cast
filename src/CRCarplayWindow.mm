@@ -30,6 +30,10 @@ id getCarplayCADisplay(void)
 {
     if ((self = [super init]))
     {
+        _observers = [[NSMutableArray alloc] init];
+        // Update this processes' preference cache
+        [[CRPreferences sharedInstance] reloadPreferences];
+
         // Start in landscape
         self.orientation = 3;
 
@@ -55,6 +59,7 @@ id getCarplayCADisplay(void)
 
         [self.rootWindow.layer setCornerRadius:13.0f];
         [self.rootWindow.layer setMasksToBounds:YES];
+        [self setupWallpaperBackground];
         [self setupDock];
 
         [self setupLiveAppView];
@@ -99,17 +104,25 @@ id getCarplayCADisplay(void)
                 objcInvoke(appSceneView, @"drawCarplayPlaceholder");
             }
         }
+
+        // Add observer the user changing the Dock's Alignment via preferences
+        id observer = [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserverForName:PREFERENCES_CHANGED_NOTIFICATION object:kPrefsDockAlignmentChanged queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+            // Update this processes' preference cache
+            [[CRPreferences sharedInstance] reloadPreferences];
+            // Redraw the dock
+            [self setupDock];
+            // Relayout the app view
+            [self resizeAppViewForOrientation:_orientation fullscreen:_isFullscreen forceUpdate:YES];
+        }];
+        [_observers addObject:observer];
     }
 
     return self;
 }
 
-- (void)setupDock
+- (void)setupWallpaperBackground
 {
     CGRect rootWindowFrame = [[self rootWindow] frame];
-    UITraitCollection *carplayTrait = [UITraitCollection traitCollectionWithUserInterfaceIdiom:3];
-    UITraitCollection *interfaceStyleTrait = [UITraitCollection traitCollectionWithUserInterfaceStyle:1];
-    UITraitCollection *traitCollection = [UITraitCollection traitCollectionWithTraitsFromCollections:@[carplayTrait, interfaceStyleTrait]];
 
     UIImageView *wallpaperImageView = [[UIImageView alloc] initWithFrame:rootWindowFrame];
     id defaultWallpaper = objcInvoke(objc_getClass("CRSUIWallpaperPreferences"), @"defaultWallpaper");
@@ -121,8 +134,21 @@ id getCarplayCADisplay(void)
     [wallpaperBlurView setFrame:rootWindowFrame];
     [wallpaperImageView addSubview:wallpaperBlurView];
     [[self rootWindow] addSubview:wallpaperImageView];
+}
 
-    self.dockView = [[UIView alloc] initWithFrame:CGRectMake(0, rootWindowFrame.origin.y, CARPLAY_DOCK_WIDTH, rootWindowFrame.size.height)];
+- (void)setupDock
+{
+    // If the dock already exists, remove it. This allows the dock to be redrawn easily if the user switches the alignment
+    if (_dockView)
+    {
+        [_dockView removeFromSuperview];
+    }
+
+    CGRect rootWindowFrame = [[self rootWindow] frame];
+    BOOL rightHandDock = [[CRPreferences sharedInstance] dockAlignment] == CRDockAlignmentRight;
+
+    CGFloat dockXOrigin = (rightHandDock) ? rootWindowFrame.size.width - CARPLAY_DOCK_WIDTH : 0;
+    self.dockView = [[UIView alloc] initWithFrame:CGRectMake(dockXOrigin, rootWindowFrame.origin.y, CARPLAY_DOCK_WIDTH, rootWindowFrame.size.height)];
 
     // Setup dock visual effects
     id blurEffect = objcInvoke_1(objc_getClass("UIBlurEffect"), @"effectWithBlurRadius:", 20.0);
@@ -137,6 +163,9 @@ id getCarplayCADisplay(void)
     [[self rootWindow] addSubview:self.dockView];
 
     NSBundle *carplayBundle = [NSBundle bundleWithPath:@"/System/Library/CoreServices/CarPlay.app"];
+    UITraitCollection *carplayTrait = [UITraitCollection traitCollectionWithUserInterfaceIdiom:3];
+    UITraitCollection *interfaceStyleTrait = [UITraitCollection traitCollectionWithUserInterfaceStyle:1];
+    UITraitCollection *traitCollection = [UITraitCollection traitCollectionWithTraitsFromCollections:@[carplayTrait, interfaceStyleTrait]];
 
     CGFloat buttonSize = 35;
     UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -372,6 +401,12 @@ When a CarPlay App is closed
     // Invalidate the scene monitor
     [self.sceneMonitor invalidate];
 
+    // Remove any observers
+    for (id observer in _observers)
+    {
+        [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] removeObserver:observer];
+    }
+
     void (^cleanupAfterCarplay)() = ^() {
         // Notify the application process to stop enforcing an orientation lock
         int resetOrientationLock = -1;
@@ -519,9 +554,10 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
     [hostingContentView setTransform:CGAffineTransformMakeScale(widthScale, heightScale)];
     [[self.appViewController view] setFrame:CGRectMake(xOrigin, [[self.appViewController view] frame].origin.y, carplayDisplaySize.width, carplayDisplaySize.height)];
 
+    BOOL rightHandDock = [[CRPreferences sharedInstance] dockAlignment] == CRDockAlignmentRight;
     UIView *containingView = [self appContainerView];
     CGRect containingViewFrame = [containingView frame];
-    containingViewFrame.origin.x = dockWidth;
+    containingViewFrame.origin.x = (rightHandDock) ? 0 : dockWidth;
     [containingView setFrame:containingViewFrame];
 
     [self.dockView setAlpha: (fullscreen) ? 0: 1];
