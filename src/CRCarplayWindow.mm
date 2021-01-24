@@ -37,6 +37,8 @@ id getCarplayCADisplay(void)
         // Start in landscape
         self.orientation = 3;
 
+        self.sessionStatus = objcInvoke([objc_getClass("CARSessionStatus") alloc], @"initForCarPlayShell");
+
         self.application = objcInvoke_1(objcInvoke(objc_getClass("SBApplicationController"), @"sharedInstance"), @"applicationWithBundleIdentifier:", identifier);
         assertGotExpectedObject(self.application, @"SBApplication");
 
@@ -145,7 +147,7 @@ id getCarplayCADisplay(void)
     }
 
     CGRect rootWindowFrame = [[self rootWindow] frame];
-    BOOL rightHandDock = [[CRPreferences sharedInstance] dockAlignment] == CRDockAlignmentRight;
+    BOOL rightHandDock = [self shouldUseRightHandDock];
 
     CGFloat dockXOrigin = (rightHandDock) ? rootWindowFrame.size.width - CARPLAY_DOCK_WIDTH : 0;
     self.dockView = [[UIView alloc] initWithFrame:CGRectMake(dockXOrigin, rootWindowFrame.origin.y, CARPLAY_DOCK_WIDTH, rootWindowFrame.size.height)];
@@ -554,17 +556,40 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
     [hostingContentView setTransform:CGAffineTransformMakeScale(widthScale, heightScale)];
     [[self.appViewController view] setFrame:CGRectMake(xOrigin, [[self.appViewController view] frame].origin.y, carplayDisplaySize.width, carplayDisplaySize.height)];
 
-    BOOL rightHandDock = [[CRPreferences sharedInstance] dockAlignment] == CRDockAlignmentRight;
+    BOOL rightHandDock = [self shouldUseRightHandDock];
     UIView *containingView = [self appContainerView];
     CGRect containingViewFrame = [containingView frame];
     containingViewFrame.origin.x = (rightHandDock) ? 0 : dockWidth;
     [containingView setFrame:containingViewFrame];
 
-    [self.dockView setAlpha: (fullscreen) ? 0: 1];
+    [self.dockView setAlpha: (fullscreen) ? 0 : 1];
 
     // Update last known orientation and fullscreen status
     self.orientation = desiredOrientation;
     self.isFullscreen = fullscreen;
+}
+
+- (BOOL)shouldUseRightHandDock
+{
+    switch ([[CRPreferences sharedInstance] dockAlignment])
+    {
+        case CRDockAlignmentLeft:
+            return NO;
+        case CRDockAlignmentRight:
+            return YES;
+        case CRDockAlignmentAuto:
+        {
+            id carplaySession = objcInvoke(self.sessionStatus, @"session");
+            id usesRightHand = objcInvoke_1(carplaySession, @"_endpointValueForKey:", @"RightHandDrive");
+            return [usesRightHand boolValue];
+        }
+        default:
+        {
+            break;
+        }
+    }
+
+    return NO;
 }
 
 @end
