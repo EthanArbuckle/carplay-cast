@@ -230,18 +230,21 @@ Used for adding "carplay declaration" to newly installed apps so they appear on 
 {
     id _self = %orig;
     // Register for Preference Changed notifications
-    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserverForName:PREFERENCES_CHANGED_NOTIFICATION object:kPrefsAppLibraryChanged queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserverForName:PREFERENCES_CHANGED_NOTIFICATION object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+        // Reload the preferences from disk
         [[CRPreferences sharedInstance] reloadPreferences];
-        // Reload app library - in case apps were added/removed
-        id updatedLibrary = objcInvoke(objc_getClass("CARApplication"), @"_newApplicationLibrary");
-        objcInvoke_1(self, @"setLibrary:", updatedLibrary);
-        objcInvoke(self, @"_handleAppLibraryRefresh");
-    }];
-
-    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserverForName:PREFERENCES_CHANGED_NOTIFICATION object:kPrefsIconLayoutChanged queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
-        [[CRPreferences sharedInstance] reloadPreferences];
-        // Relayout dashboard icons
-        objcInvoke(self, @"resetIconState");
+        if ([note.object isEqualToString:kPrefsAppLibraryChanged])
+        {
+            // Apps were added/removed - reload the app library
+            id updatedLibrary = objcInvoke(objc_getClass("CARApplication"), @"_newApplicationLibrary");
+            objcInvoke_1(self, @"setLibrary:", updatedLibrary);
+            objcInvoke(self, @"_handleAppLibraryRefresh");
+        }
+        else if ([note.object isEqualToString:kPrefsIconLayoutChanged])
+        {
+            // 5 column dashboard was changed. Relayout dashboard icons
+            objcInvoke(self, @"resetIconState");
+        }
     }];
 
     return _self;

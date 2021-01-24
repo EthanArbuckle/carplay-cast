@@ -571,6 +571,7 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
 
 - (BOOL)shouldUseRightHandDock
 {
+    // Should the dock be drawn on the left or right side of the screen
     switch ([[CRPreferences sharedInstance] dockAlignment])
     {
         case CRDockAlignmentLeft:
@@ -579,6 +580,7 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
             return YES;
         case CRDockAlignmentAuto:
         {
+            // Auto mode - determine which alignment Carplay is using and mimick it
             id carplaySession = objcInvoke(self.sessionStatus, @"session");
             id usesRightHand = objcInvoke_1(carplaySession, @"_endpointValueForKey:", @"RightHandDrive");
             return [usesRightHand boolValue];
