@@ -24,13 +24,13 @@
 
 - (void)reloadPreferences
 {
-	if ([[NSFileManager defaultManager] fileExistsAtPath:PREFERENCES_PLIST_PATH])
-	{
-		_cachedPreferences = [[NSDictionary alloc] initWithContentsOfFile:PREFERENCES_PLIST_PATH];
-	}
-	else {
-		_cachedPreferences = @{};
-	}
+    if ([[NSFileManager defaultManager] fileExistsAtPath:PREFERENCES_PLIST_PATH])
+    {
+        _cachedPreferences = [[NSDictionary alloc] initWithContentsOfFile:PREFERENCES_PLIST_PATH];
+    }
+    else {
+        _cachedPreferences = @{};
+    }
 }
 
 - (void)writePreferences
