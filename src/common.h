@@ -44,6 +44,7 @@ static char *kPropertyKey_didDrawPlaceholder;
 #define kPrefsAppDataReceiving @"Receiving"
 #define kPrefsAppLibraryChanged @"appLibrary"
 #define kPrefsDockAlignmentChanged @"dockAlignment"
+#define kPrefsIconLayoutChanged @"iconLayout"
 
 #define BLACKLIST_PLIST_PATH @"/var/mobile/Library/Preferences/com.carplayenable.blacklisted-apps.plist"
 

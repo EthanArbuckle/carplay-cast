@@ -42,7 +42,7 @@
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
 {
-	return 2;
+	return 3;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
@@ -53,6 +53,8 @@
 			return 1;
 		case 1:
 			return 3;
+		case 2:
+			return 1;
 		default:
 			break;
 	}
@@ -100,6 +102,17 @@
 			[cell setAccessoryType:UITableViewCellAccessoryNone];
 		}
 	}
+	else if (indexPath.section == 2)
+	{
+		if (indexPath.row == 0)
+		{
+			[[cell textLabel] setText:@"5 Columns"];
+			UISwitch *cellSwitch = [[UISwitch alloc] initWithFrame:CGRectZero];
+			[cellSwitch setOn:[[CRPreferences sharedInstance] fiveColumnIconLayout] animated:NO];
+			[cellSwitch addTarget:self action:@selector(iconLayoutSwitchChanged:) forControlEvents:UIControlEventValueChanged];
+			[cell setAccessoryView:cellSwitch];
+		}
+	}
 	
 	return cell;
 }
@@ -112,6 +125,8 @@
 			return @"CarPlay Dashboard";
 		case 1:
 			return @"Dock Alignment";
+		case 2:
+			return @"Carplay Icons";
 		default:
 			break;
 	}
@@ -120,14 +135,9 @@
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section
 {
-	switch (section)
+	if (section == tableView.numberOfSections - 1)
 	{
-		case 0:
-			return @"";
-		case 1:
-			return @"Created by Ethan Arbuckle";
-		default:
-			break;
+		return @"Created by Ethan Arbuckle";
 	}
 	return @"";
 }
@@ -161,6 +171,14 @@
 
 	[_rootTable reloadData];
 	[tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
+- (void)iconLayoutSwitchChanged:(UISwitch *)sender
+{
+	// Save the new setting
+	[[CRPreferences sharedInstance] updateValue:@(sender.isOn) forPreferenceKey:@"fiveColumnIconLayout"];
+	// Notify CarPlay of the changes
+	[[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotification:[NSNotification notificationWithName:PREFERENCES_CHANGED_NOTIFICATION object:kPrefsIconLayoutChanged]];
 }
 
 @end

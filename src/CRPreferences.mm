@@ -66,4 +66,14 @@
     return CRDockAlignmentAuto;
 }
 
+- (BOOL)fiveColumnIconLayout
+{
+    if (_cachedPreferences && [_cachedPreferences valueForKey:@"fiveColumnIconLayout"])
+    {
+        return [[_cachedPreferences valueForKey:@"fiveColumnIconLayout"] boolValue];
+    }
+
+    return YES;
+}
+
 @end

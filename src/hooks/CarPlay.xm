@@ -123,11 +123,14 @@ Carplay dashboard icon appearance
 /*
 Make the CarPlay dashboard show 5 columns of apps instead of 4
 */
-- (void)setNumberOfPortraitColumns:(int)arg1
+- (int)numberOfPortraitColumns
 {
-    // TODO: changes depending on radio screen size
-    int minColumns = MAX(5, arg1);
-    %orig(minColumns);
+    int columns = %orig;
+    if ([[CRPreferences sharedInstance] fiveColumnIconLayout])
+    {
+        columns = MAX(5, columns);
+    }
+    return columns;
 }
 
 /*
@@ -136,8 +139,10 @@ Make the Carplay dashboard icons a little smaller so 5 fit comfortably
 - (struct SBIconImageInfo)iconImageInfoForGridSizeClass:(unsigned long long)arg1
 {
     struct SBIconImageInfo info = %orig;
-    info.size = CGSizeMake(50, 50);
-
+    if ([[CRPreferences sharedInstance] fiveColumnIconLayout])
+    {
+        info.size = CGSizeMake(50, 50);
+    }
     return info;
 }
 
@@ -231,6 +236,12 @@ Used for adding "carplay declaration" to newly installed apps so they appear on 
         id updatedLibrary = objcInvoke(objc_getClass("CARApplication"), @"_newApplicationLibrary");
         objcInvoke_1(self, @"setLibrary:", updatedLibrary);
         objcInvoke(self, @"_handleAppLibraryRefresh");
+    }];
+
+    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] addObserverForName:PREFERENCES_CHANGED_NOTIFICATION object:kPrefsIconLayoutChanged queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+        [[CRPreferences sharedInstance] reloadPreferences];
+        // Relayout dashboard icons
+        objcInvoke(self, @"resetIconState");
     }];
 
     return _self;
