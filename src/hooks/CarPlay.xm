@@ -20,16 +20,8 @@ If an app already supports CarPlay, leave it alone
 */
 void addCarplayDeclarationsToAppLibrary(id appLibrary)
 {
-    // Load blacklisted identifiers from filesystem
-    NSArray *blacklistedIdentifiers = nil;
-    if ([[NSFileManager defaultManager] fileExistsAtPath:BLACKLIST_PLIST_PATH])
-    {
-        blacklistedIdentifiers = [NSArray arrayWithContentsOfFile:BLACKLIST_PLIST_PATH];
-    }
-
     // Load exluded apps from user's preferences
     NSArray *userExcludedApps = [[CRPreferences sharedInstance] excludedApplications];
-    blacklistedIdentifiers = [blacklistedIdentifiers arrayByAddingObjectsFromArray:userExcludedApps];
 
     for (id appInfo in objcInvoke(appLibrary, @"allInstalledApplications"))
     {
@@ -47,7 +39,7 @@ void addCarplayDeclarationsToAppLibrary(id appLibrary)
             }
 
             // Skip if blacklisted
-            if (blacklistedIdentifiers && [blacklistedIdentifiers containsObject:appBundleID])
+            if (userExcludedApps && [userExcludedApps containsObject:appBundleID])
             {
                 continue;
             }

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 REPO_IP_ADDRESS = "206.189.219.64"
-REPO_PATH = "/var/www/html/ghostbinrepo"
+REPO_PATH = "/var/www/ghostbinrepo"
 DEBS_FOLDER = "debs"
 
 

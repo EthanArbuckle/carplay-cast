@@ -53,7 +53,7 @@
         return [_cachedPreferences valueForKey:@"excludedApps"];
     }
 
-    return @[];
+    return @[@"com.netflix.Netflix", @"com.hulu.plus", @"com.amazon.aiv.AIVApp"];
 }
 
 - (CRDockAlignment)dockAlignment
