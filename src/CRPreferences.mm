@@ -76,4 +76,14 @@
     return YES;
 }
 
+- (BOOL)autohideDock
+{
+    if (_cachedPreferences && [_cachedPreferences valueForKey:@"autohideDock"])
+    {
+        return [[_cachedPreferences valueForKey:@"autohideDock"] boolValue];
+    }
+
+    return NO;
+}
+
 @end

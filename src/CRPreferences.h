@@ -19,5 +19,6 @@ typedef NS_ENUM(NSInteger, CRDockAlignment) {
 - (NSArray *)excludedApplications;
 - (CRDockAlignment)dockAlignment;
 - (BOOL)fiveColumnIconLayout;
+- (BOOL)autohideDock;
 
 @end

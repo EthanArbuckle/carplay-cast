@@ -35,14 +35,9 @@
     return self;
 }
 
--(void)viewDidLoad
-{
-    [[self view] setBackgroundColor:[UIColor redColor]];
-}
-
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
 {
-    return 3;
+    return 4;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
@@ -54,6 +49,8 @@
         case 1:
             return 3;
         case 2:
+            return 1;
+        case 3:
             return 1;
         default:
             break;
@@ -113,6 +110,17 @@
             [cell setAccessoryView:cellSwitch];
         }
     }
+    else if (indexPath.section == 3)
+    {
+        if (indexPath.row == 0)
+        {
+            [[cell textLabel] setText:@"Auto-hide Dock"];
+            UISwitch *cellSwitch = [[UISwitch alloc] initWithFrame:CGRectZero];
+            [cellSwitch setOn:[[CRPreferences sharedInstance] autohideDock] animated:NO];
+            [cellSwitch addTarget:self action:@selector(autohideDockSwitchChanged:) forControlEvents:UIControlEventValueChanged];
+            [cell setAccessoryView:cellSwitch];
+        }
+    }
     
     return cell;
 }
@@ -127,6 +135,8 @@
             return @"Dock Alignment";
         case 2:
             return @"Carplay Icons";
+        case 3:
+            return @"Fullscreen";
         default:
             break;
     }
@@ -179,6 +189,14 @@
     [[CRPreferences sharedInstance] updateValue:@(sender.isOn) forPreferenceKey:@"fiveColumnIconLayout"];
     // Notify CarPlay of the changes
     [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotification:[NSNotification notificationWithName:PREFERENCES_CHANGED_NOTIFICATION object:kPrefsIconLayoutChanged]];
+}
+
+- (void)autohideDockSwitchChanged:(UISwitch *)sender
+{
+    // Save the new setting
+    [[CRPreferences sharedInstance] updateValue:@(sender.isOn) forPreferenceKey:@"autohideDock"];
+    // Notify CarPlay of the changes
+    [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] postNotification:[NSNotification notificationWithName:PREFERENCES_CHANGED_NOTIFICATION object:kPrefsDockAlignmentChanged]];
 }
 
 @end
