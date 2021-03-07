@@ -15,6 +15,7 @@ id getCarplayCADisplay(void);
 @property (nonatomic, retain) id sessionStatus;
 @property (nonatomic, retain) NSMutableArray *observers;
 @property (nonatomic, retain) UITapGestureRecognizer *screenTapRecognizer;
+@property (nonatomic, retain) NSTimer *inactivityTimer;
 
 @property (nonatomic) int orientation;
 @property (nonatomic) BOOL isFullscreen;
