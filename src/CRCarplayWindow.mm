@@ -117,6 +117,11 @@ id getCarplayCADisplay(void)
             [self resizeAppViewForOrientation:_orientation fullscreen:_isFullscreen forceUpdate:YES];
         }];
         [_observers addObject:observer];
+
+        _screenTapRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleScreenTapped)];
+        id systemGestureManager = objcInvoke(objc_getClass("_UISystemGestureManager"), @"sharedInstance");
+        id identity = objcInvoke(objcInvoke(self.rootWindow, @"displayConfiguration"), @"identity");
+        objcInvoke_2(systemGestureManager, @"addGestureRecognizer:toDisplayWithIdentity:", _screenTapRecognizer, identity);
     }
 
     return self;
@@ -360,12 +365,22 @@ Use this to close the window on the CarPlay screen if the app crashes or is kill
     objcInvoke(self, @"dismiss");
 }
 
+- (void)handleScreenTapped
+{
+    LOG_LIFECYCLE_EVENT;
+    // The carplay screen was tapped.
+    // If the window is fullscreen'd, exit fullscreen
+    if (_isFullscreen)
+    {
+        [self exitFullscreen];
+    }
+}
+
 - (void)exitFullscreen
 {
     LOG_LIFECYCLE_EVENT;
-    if ([self fullscreenTransparentOverlay] != nil)
+    if (_isFullscreen)
     {
-        [[self fullscreenTransparentOverlay] removeFromSuperview];
         [self resizeAppViewForOrientation:self.orientation fullscreen:NO forceUpdate:NO];
     }
 }
@@ -380,15 +395,6 @@ Use this to close the window on the CarPlay screen if the app crashes or is kill
     }
 
     BOOL toFullScreen = 1;
-
-    self.fullscreenTransparentOverlay = [[UIView alloc] initWithFrame:[[self rootWindow] frame]];
-    [self.fullscreenTransparentOverlay setBackgroundColor:[UIColor whiteColor]];
-    [self.fullscreenTransparentOverlay setAlpha:0.05];
-    UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(exitFullscreen)];
-    [self.fullscreenTransparentOverlay addGestureRecognizer:tapGesture];
-    [self.fullscreenTransparentOverlay setUserInteractionEnabled:YES];
-    [[self rootWindow] addSubview:self.fullscreenTransparentOverlay];
-
     [UIView animateWithDuration:0.2 animations:^(void) {
         [self resizeAppViewForOrientation:self.orientation fullscreen:toFullScreen forceUpdate:NO];
     } completion:nil];
@@ -408,6 +414,11 @@ When a CarPlay App is closed
     {
         [[objc_getClass("NSDistributedNotificationCenter") defaultCenter] removeObserver:observer];
     }
+
+    // Disable the screen-tap recognizer
+    id systemGestureManager = objcInvoke(objc_getClass("_UISystemGestureManager"), @"sharedInstance");
+    id identity = objcInvoke(objcInvoke(self.rootWindow, @"displayConfiguration"), @"identity");
+    objcInvoke_2(systemGestureManager, @"removeGestureRecognizer:fromDisplayWithIdentity:", _screenTapRecognizer, identity);
 
     void (^cleanupAfterCarplay)() = ^() {
         // Notify the application process to stop enforcing an orientation lock
