@@ -373,14 +373,17 @@ Use this to close the window on the CarPlay screen if the app crashes or is kill
 - (void)startInactivityTimer
 {
     LOG_LIFECYCLE_EVENT;
-    [self killInactivityTimerIfNeeded];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [self killInactivityTimerIfNeeded];
 
-    // Only start the timer if auto-hide is enabled
-    if ([[CRPreferences sharedInstance] autohideDock])
-    {
-        _inactivityTimer = [NSTimer scheduledTimerWithTimeInterval:2 target:self selector:@selector(handleInactivity) userInfo:nil repeats:NO];
-        [_inactivityTimer retain];
-    }
+        // Only start the timer if auto-hide is enabled
+        if ([[CRPreferences sharedInstance] autohideDock])
+        {
+            _inactivityTimer = [NSTimer timerWithTimeInterval:2 target:self selector:@selector(handleInactivity) userInfo:nil repeats:NO];
+            [[NSRunLoop mainRunLoop] addTimer:_inactivityTimer forMode:NSRunLoopCommonModes];
+            [_inactivityTimer retain];
+        }
+    });
 }
 
 - (void)killInactivityTimerIfNeeded
