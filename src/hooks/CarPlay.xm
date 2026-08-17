@@ -12,7 +12,7 @@ struct SBIconImageInfo {
     double continuousCornerRadius;
 };
 
-%hook CARApplication
+%hook DashBoard
 /*
 Given an FBSApplicationLibrary, force all apps within the library to show up on the CarPlay dashboard.
 Exclude system apps (they are always glitchy for some reason) and enforce a blacklist.
@@ -76,7 +76,7 @@ Include all User applications on the CarPlay dashboard
     // %orig creates an app library that only contains Carplay-enabled stuff, so its not useful.
     // Create an app library that contains everything
     id allAppsConfiguration = [[objc_getClass("FBSApplicationLibraryConfiguration") alloc] init];
-    objcInvoke_1(allAppsConfiguration, @"setApplicationInfoClass:", objc_getClass("CARApplicationInfo"));
+    objcInvoke_1(allAppsConfiguration, @"setApplicationInfoClass:", objc_getClass("DBApplicationInfo"));
     objcInvoke_1(allAppsConfiguration, @"setApplicationPlaceholderClass:", objc_getClass("FBSApplicationPlaceholder"));
     objcInvoke_1(allAppsConfiguration, @"setAllowConcurrentLoading:", 1);
     objcInvoke_1(allAppsConfiguration, @"setInstalledApplicationFilter:", ^BOOL(id appProxy, NSSet *arg2) {
@@ -145,7 +145,7 @@ Make the Carplay dashboard icons a little smaller so 5 fit comfortably
 /*
 When an app is launched via Carplay dashboard
 */
-%hook CARApplicationLaunchInfo
+%hook DBApplicationLaunchInfo
 
 + (id)launchInfoForApplication:(id)arg1 withActivationSettings:(id)arg2
 {
@@ -175,12 +175,12 @@ When an app is launched via Carplay dashboard
 
         // If there is already a native-Carplay app running, close it
         id dashboard = objcInvoke(sharedApp, @"_currentDashboard");
-        assertGotExpectedObject(dashboard, @"CARDashboard");
+        assertGotExpectedObject(dashboard, @"DBDashboard");
         NSDictionary *foregroundScenes = objcInvoke(dashboard, @"identifierToForegroundAppScenesMap");
         if ([[foregroundScenes allKeys] count] > 0)
         {
-            id homeButtonEvent = objcInvoke_2(objc_getClass("CAREvent"), @"eventWithType:context:", 1, @"Close carplay app");
-            assertGotExpectedObject(homeButtonEvent, @"CAREvent");
+            id homeButtonEvent = objcInvoke_2(objc_getClass("DBEvent"), @"eventWithType:context:", 1, @"Close carplay app");
+            assertGotExpectedObject(homeButtonEvent, @"DBEvent");
             objcInvoke_1(dashboard, @"handleEvent:", homeButtonEvent);
         }
 
@@ -195,7 +195,7 @@ When an app is launched via Carplay dashboard
 /*
 When an app is launched via the Carplay Dock
 */
-%hook CARAppDockViewController
+%hook DBAppDockViewController
 
 - (void)_dockButtonPressed:(id)arg1
 {
@@ -218,7 +218,7 @@ When an app is launched via the Carplay Dock
 Called when an app is installed or uninstalled.
 Used for adding "carplay declaration" to newly installed apps so they appear on the dashboard
 */
-%hook _CARDashboardHomeViewController
+%hook DBDashboardHomeViewController
 
 - (id)initWithEnvironment:(id)arg1
 {
@@ -230,7 +230,7 @@ Used for adding "carplay declaration" to newly installed apps so they appear on 
         if ([note.object isEqualToString:kPrefsAppLibraryChanged])
         {
             // Apps were added/removed - reload the app library
-            id updatedLibrary = objcInvoke(objc_getClass("CARApplication"), @"_newApplicationLibrary");
+            id updatedLibrary = objcInvoke(objc_getClass("DashBoard"), @"_newApplicationLibrary");
             objcInvoke_1(self, @"setLibrary:", updatedLibrary);
             objcInvoke(self, @"_handleAppLibraryRefresh");
         }
@@ -259,7 +259,7 @@ App icons on the Carplay dashboard.
 For apps that natively support Carplay, add a longpress gesture to launch it in "full mode". Tapping them
 will launch their normal Carplay mode UI
 */
-%hook CARIconView
+%hook DBIconView
 
 %new
 - (void)handleLaunchAppInNormalMode:(UILongPressGestureRecognizer *)gesture
