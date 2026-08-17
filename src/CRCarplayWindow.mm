@@ -192,9 +192,7 @@ id getCarplayCADisplay(void)
 
     [[self rootWindow] addSubview:self.dockView];
 
-    NSBundle *carplayBundle = [NSBundle bundleWithPath:@"/System/Library/CoreServices/CarPlay.app"];
-    UITraitCollection *carplayTrait = [UITraitCollection traitCollectionWithUserInterfaceIdiom:3];
-    UITraitCollection *interfaceStyleTrait = [UITraitCollection traitCollectionWithUserInterfaceStyle:1];
+    NSBundle *carplayBundle = [NSBundle bundleWithPath:@"/System/Library/PrivateFrameworks/DashBoard.framework"];
     UITraitCollection *carplayTrait = [UITraitCollection traitCollectionWithUserInterfaceIdiom:(UIUserInterfaceIdiom)3];
     UITraitCollection *interfaceStyleTrait = [UITraitCollection traitCollectionWithUserInterfaceStyle:(UIUserInterfaceStyle)1];
     UITraitCollection *traitCollection = [UITraitCollection traitCollectionWithTraitsFromCollections:@[carplayTrait, interfaceStyleTrait]];
