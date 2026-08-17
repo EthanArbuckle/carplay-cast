@@ -65,7 +65,7 @@ Called when a window intends to rotate to a new orientation. Used to force lands
 
 %ctor
 {
-    BAIL_IF_UNSUPPORTED_IOS;
+    // BAIL_IF_UNSUPPORTED_IOS;
 
     // Only need to inject into User Apps (+ jailbreak) apps
     NSString *bundlePath = [[NSBundle mainBundle] bundlePath];

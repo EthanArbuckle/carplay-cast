@@ -553,7 +553,7 @@ int hook_BKSDisplayServicesSetScreenBlanked(int arg1)
 
 %ctor
 {
-    BAIL_IF_UNSUPPORTED_IOS;
+    // BAIL_IF_UNSUPPORTED_IOS;
 
     if ([[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.springboard"])
     {

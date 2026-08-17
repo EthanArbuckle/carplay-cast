@@ -307,7 +307,7 @@ will launch their normal Carplay mode UI
 
 
 %ctor {
-    BAIL_IF_UNSUPPORTED_IOS;
+    // BAIL_IF_UNSUPPORTED_IOS;
 
     if (![[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.CarPlayApp"]) {
         return;
