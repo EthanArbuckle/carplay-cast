@@ -270,6 +270,203 @@ than the device orientation. Force the switcher to use the device's physical ori
 
 %end
 
+%hook SBMedusaHostedKeyboardWindow
+
+- (void)setHidden:(BOOL)hidden
+{
+    static char kCarplayKeyboardContainerKey;
+
+    UIWindow *keyboardWindow = (UIWindow *)self;
+
+    id liveCarplayWindow = objcInvoke(
+        [UIApplication sharedApplication],
+        @"liveCarplayWindow"
+    );
+
+    if (!liveCarplayWindow)
+    {
+        UIView *keyboardContainer =
+            objc_getAssociatedObject(
+                self,
+                &kCarplayKeyboardContainerKey
+            );
+
+        if (keyboardContainer)
+        {
+            [keyboardContainer removeFromSuperview];
+
+            objc_setAssociatedObject(
+                self,
+                &kCarplayKeyboardContainerKey,
+                nil,
+                OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            );
+        }
+
+        %orig(hidden);
+        return;
+    }
+
+    UIWindow *carplayRootWindow =
+        (UIWindow *)objcInvoke(
+            liveCarplayWindow,
+            @"rootWindow"
+        );
+
+    UIView *appContainerView =
+        (UIView *)objcInvoke(
+            liveCarplayWindow,
+            @"appContainerView"
+        );
+
+    if (!carplayRootWindow || !appContainerView)
+    {
+        %orig(hidden);
+        return;
+    }
+
+    id presenter = getIvar(
+        self,
+        @"_remoteHostedKeyboardScenePresenter"
+    );
+
+    if (!presenter ||
+        ![presenter respondsToSelector:
+            sel_registerName("presentationView")])
+    {
+        %orig(hidden);
+        return;
+    }
+
+    UIView *presentationView =
+        (UIView *)objcInvoke(
+            presenter,
+            @"presentationView"
+        );
+
+    if (!presentationView)
+    {
+        %orig(hidden);
+        return;
+    }
+
+    %orig(NO);
+
+    CGRect targetFrame = [
+        appContainerView.superview
+        convertRect:appContainerView.frame
+        toView:carplayRootWindow
+    ];
+
+    CGSize sourceSize = presentationView.bounds.size;
+
+    if (sourceSize.width <= 0.0 ||
+        sourceSize.height <= 0.0)
+    {
+        sourceSize = keyboardWindow.bounds.size;
+    }
+
+    const CGFloat sourceKeyboardHeight = 260.0;
+
+    CGFloat scaleX =
+        targetFrame.size.width / sourceSize.width;
+
+    CGFloat wantedKeyboardHeight =
+        targetFrame.size.height * 0.78;
+
+    CGFloat scaleY =
+        wantedKeyboardHeight / sourceKeyboardHeight;
+
+    if (scaleY > scaleX)
+    {
+        scaleY = scaleX;
+    }
+
+    CGFloat keyboardHeight =
+        sourceKeyboardHeight * scaleY;
+
+    UIView *keyboardContainer =
+        objc_getAssociatedObject(
+            self,
+            &kCarplayKeyboardContainerKey
+        );
+
+    if (!keyboardContainer)
+    {
+        keyboardContainer =
+            [[UIView alloc] initWithFrame:CGRectZero];
+
+        keyboardContainer.backgroundColor =
+            [UIColor clearColor];
+
+        keyboardContainer.clipsToBounds = YES;
+        keyboardContainer.userInteractionEnabled = YES;
+
+        objc_setAssociatedObject(
+            self,
+            &kCarplayKeyboardContainerKey,
+            keyboardContainer,
+            OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        );
+    }
+
+    if (keyboardContainer.superview != carplayRootWindow)
+    {
+        [keyboardContainer removeFromSuperview];
+        [carplayRootWindow addSubview:keyboardContainer];
+
+        NSLog(
+            @"carplayenable: moved keyboard container to new CarPlay root %@",
+            carplayRootWindow
+        );
+    }
+
+    keyboardContainer.hidden = NO;
+
+    keyboardContainer.frame = CGRectMake(
+        targetFrame.origin.x,
+        CGRectGetMaxY(targetFrame) - keyboardHeight,
+        targetFrame.size.width,
+        keyboardHeight
+    );
+
+    if (presentationView.superview != keyboardContainer)
+    {
+        [presentationView removeFromSuperview];
+        [keyboardContainer addSubview:presentationView];
+    }
+
+    presentationView.transform =
+        CGAffineTransformIdentity;
+
+    presentationView.bounds = CGRectMake(
+        0,
+        0,
+        sourceSize.width,
+        sourceSize.height
+    );
+
+    presentationView.center = CGPointMake(
+        keyboardContainer.bounds.size.width / 2.0,
+        keyboardContainer.bounds.size.height -
+            ((sourceSize.height * scaleY) / 2.0)
+    );
+
+    presentationView.transform =
+        CGAffineTransformMakeScale(
+            scaleX,
+            scaleY
+        );
+
+    presentationView.hidden = NO;
+    presentationView.alpha = 1.0;
+    presentationView.userInteractionEnabled = YES;
+
+    [keyboardContainer bringSubviewToFront:presentationView];
+}
+
+%end
+
 %hook SBDeviceApplicationSceneView
 
 /*
