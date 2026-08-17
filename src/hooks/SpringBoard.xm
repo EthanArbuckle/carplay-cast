@@ -195,39 +195,43 @@ happen while the device is in a faceup/facedown orientation.
 /*
 Called when something is trying to change a scene's settings (including sending it to background/foreground).
 Use this to prevent the App from going to sleep when other applications are launched on the main screen.
-*/
-- (void)updateSettings:(id)settings withTransitionContext:(id)arg2 completion:(id)arg3
+*/- (void)updateSettings:(id)settings withTransitionContext:(id)arg2 completion:(id)arg3
 {
-    // LOG_LIFECYCLE_EVENT;
     id sceneClient = objcInvoke(self, @"client");
+
     if ([sceneClient respondsToSelector:NSSelectorFromString(@"process")]) {
-        NSString *sceneAppBundleID = objcInvoke(objcInvoke(sceneClient, @"process"), @"bundleIdentifier");
-        NSArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
-        if ([lockAssertions containsObject:sceneAppBundleID]) {
-            NSLog(@"settings: %@", settings);
-            if ([settings isKindOfClass:objc_getClass("UIMutableApplicationSceneSettings")]) {
+        NSString *sceneAppBundleID = objcInvoke(
+            objcInvoke(sceneClient, @"process"),
+            @"bundleIdentifier"
+        );
 
-                objcInvoke_1(settings, @"setForeground:", @(1));
-                objcInvoke_1(settings, @"setInterfaceOrientation:", @(2));
+        NSArray *lockAssertions = objc_getAssociatedObject(
+            [UIApplication sharedApplication],
+            &kPropertyKey_lockAssertionIdentifiers
+        );
 
-                id displayConfiguration = nil;
-                for (UIScreen *currentScreen in [UIScreen screens]) {
-                    if (objcInvokeT(currentScreen, @"_isCarScreen", BOOL)) {
-                        
-                        displayConfiguration = objcInvoke(currentScreen, @"fbsDisplay");
-                        if (displayConfiguration) {
-                            break;
-                        }
-                    }
-                }
-                NSLog(@"using dc: %@", displayConfiguration);
+        if ([lockAssertions containsObject:sceneAppBundleID] &&
+            [settings isKindOfClass:objc_getClass("UIMutableApplicationSceneSettings")]) {
 
-                objcInvoke_1(settings, @"setDisplayConfiguration:", displayConfiguration);
+            objcInvoke_1(settings, @"setForeground:", @(1));
+            objcInvoke_1(settings, @"setInterfaceOrientation:", @(UIInterfaceOrientationLandscapeLeft));
+            objcInvoke_1(settings, @"setDeviceOrientation:", @(UIInterfaceOrientationLandscapeLeft));
 
-                CGRect displayBounds = ((CGRect (*)(id, SEL))objc_msgSend)(displayConfiguration, sel_registerName("bounds"));
-                ((void (*)(id, SEL, CGRect))objc_msgSend)(settings, sel_registerName("setFrame:"), displayBounds); 
+            id liveCarplayWindow = objcInvoke(
+                [UIApplication sharedApplication],
+                @"liveCarplayWindow"
+            );
 
-                
+            UIView *container = [liveCarplayWindow appContainerView];
+
+            if (container) {
+                CGRect frame = container.bounds;
+
+                ((void (*)(id, SEL, CGRect))objc_msgSend)(
+                    settings,
+                    sel_registerName("setFrame:"),
+                    frame
+                );
             }
         }
     }
@@ -476,10 +480,8 @@ The relevant modes for this tweak are LiveContent (interactive app) and Placehol
 + (id)defaultSceneSpecificationForDisplayIdentity:(id)arg1 {
     LOG_LIFECYCLE_EVENT;
 
-    NSLog(@"defaultSceneSpecificationForDisplayIdentity: %@. %@", arg1, [arg1 class]);
     id displayConfiguration = objcInvoke([UIScreen mainScreen], @"fbsDisplay");
     id identity = objcInvoke(displayConfiguration, @"identity");
-    NSLog(@"new=defaultSceneSpecificationForDisplayIdentity: %@. %@", identity, [identity class]);
     return %orig(identity);
 }
 

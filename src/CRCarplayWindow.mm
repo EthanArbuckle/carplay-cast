@@ -62,14 +62,6 @@ id getCarplayCADisplay(void)
             assertGotExpectedObject(displayConfiguration, @"FBSDisplayConfiguration");
             NSLog(@"carplayenable: Creating window with display configuration: %@", displayConfiguration);
 
-            // id displayIdentity = objcInvoke(displayConfiguration, @"identity");
-
-            // id carplayExternalDisplay = getCarplayCADisplay();
-            // assertGotExpectedObject(carplayExternalDisplay, @"CADisplay");
-
-            // id displayConfiguration = objcInvoke_2([objc_getClass("FBSDisplayConfiguration") alloc], @"initWithCADisplay:isMainDisplay:", carplayExternalDisplay, 0);
-            // assertGotExpectedObject(displayConfiguration, @"FBSDisplayConfiguration");
-
             // Create window on the Carplay screen
             self.rootWindow = objcInvoke_1([objc_getClass("UIRootSceneWindow") alloc], @"initWithDisplayConfiguration:", displayConfiguration);
         }
@@ -295,25 +287,9 @@ id getCarplayCADisplay(void)
     if (!sceneLayoutManager) {
         sceneLayoutManager = objcInvoke(displaySceneManager, @"layoutStateManager");
     }
-    NSLog(@"carplayenable: Creating scene with layout manager: %@", sceneLayoutManager);
     assertGotExpectedObject(sceneLayoutManager, @"SBMainDisplayLayoutStateManager");
 
-    id displayConfiguration = nil;
-    for (UIScreen *currentScreen in [UIScreen screens]) {
-        if (objcInvokeT(currentScreen, @"_isCarScreen", BOOL)) {
-            
-            displayConfiguration = objcInvoke(currentScreen, @"fbsDisplay");
-            if (displayConfiguration) {
-                break;
-            }
-        }
-    }
-    assertGotExpectedObject(displayConfiguration, @"FBSDisplayConfiguration");
-    NSLog(@"carplayenable: Creating scene with display configuration: %@", displayConfiguration);
-
-    id displayIdentity = objcInvoke(displayConfiguration, @"identity");
-
-    id mainScreenIdentity = displayIdentity;// objcInvoke(displaySceneManager, @"displayIdentity");
+    id mainScreenIdentity = objcInvoke(displaySceneManager, @"displayIdentity");
     assertGotExpectedObject(mainScreenIdentity, @"FBSDisplayIdentity");
 
     id sceneIdentity = nil;
@@ -375,10 +351,11 @@ id getCarplayCADisplay(void)
                 sceneSettings = objcInvoke(sceneSettings, @"mutableCopy");
                 assertGotExpectedObject(sceneSettings, @"UIMutableApplicationSceneSettings");
 
-                // objcInvoke_1(sceneSettings, @"setBackgrounded:", 0);
                 objcInvoke_1(sceneSettings, @"setForeground:", 1);
                 objcInvoke_1(sceneSettings, @"setInterfaceOrientation:", self.orientation);
                 objcInvoke_1(sceneSettings, @"setDeviceOrientation:", self.orientation);
+                objcInvoke_1(sceneSettings, @"setInterfaceOrientation:", self.orientation);
+
 
                ((void (*)(id, SEL, id, id, id))objc_msgSend)(appScene, NSSelectorFromString(@"updateSettings:withTransitionContext:completion:"), sceneSettings, nil, ^{});
 
@@ -596,67 +573,83 @@ Handle resizing the Carplay App window. Called anytime the app orientation chang
 - (void)resizeAppViewForOrientation:(UIInterfaceOrientation)desiredOrientation fullscreen:(BOOL)fullscreen forceUpdate:(BOOL)forceUpdate
 {
     LOG_LIFECYCLE_EVENT;
-    if (!forceUpdate && (desiredOrientation == self.orientation && self.isFullscreen == fullscreen)) {
+
+    if (!forceUpdate &&
+        desiredOrientation == self.orientation &&
+        self.isFullscreen == fullscreen) {
         return;
     }
 
-    // Make sure the grabber doesn't appear
-    id deviceAppViewController = getIvar(self.appViewController, @"_deviceAppViewController");
-    ((void (*)(id, SEL, unsigned long long))objc_msgSend)(deviceAppViewController, NSSelectorFromString(@"setHomeGrabberDisplayMode:"), 1);
+    id deviceVC = getIvar(self.appViewController, @"_deviceAppViewController");
+    ((void (*)(id, SEL, unsigned long long))objc_msgSend)(
+        deviceVC,
+        NSSelectorFromString(@"setHomeGrabberDisplayMode:"),
+        1
+    );
 
-    // id appSceneView = getIvar(deviceAppViewController, @"_sceneView");
-    // assertGotExpectedObject(appSceneView, @"SBSceneView");
-    // UIView *hostingContentView = getIvar(appSceneView, @"_sceneContentContainerView");
-    UIScreen *targetScreen = nil;
-    if (_drawOnMainScreen) {
-        targetScreen = [UIScreen mainScreen];
-    }
-    else {
-        for (UIScreen *currentScreen in [UIScreen screens]) {
-            if (objcInvokeT(currentScreen, @"_isCarScreen", BOOL)) {
-                targetScreen = currentScreen;
-                break;
-            }
+    CGFloat dockWidth = fullscreen ? 0.0 : CARPLAY_DOCK_WIDTH;
+    CGRect rootBounds = self.rootWindow.bounds;
+
+    self.appContainerView.transform = CGAffineTransformIdentity;
+    self.appContainerView.frame = CGRectMake(
+        [self shouldUseRightHandDock] ? 0.0 : dockWidth,
+        0.0,
+        rootBounds.size.width - dockWidth,
+        rootBounds.size.height
+    );
+
+    CGRect sceneFrame = self.appContainerView.bounds;
+
+    void (^updateSceneGeometry)(void) = ^{
+        id sceneHandle = objcInvoke(self.appViewController, @"sceneHandle");
+        id appScene = objcInvoke(sceneHandle, @"sceneIfExists");
+        if (!appScene) {
+            return;
         }
-    }
 
-    assertGotExpectedObject(targetScreen, @"UIScreen");
+        id settings = objcInvoke(objcInvoke(appScene, @"settings"), @"mutableCopy");
 
-    CGSize carplayDisplaySize = [targetScreen currentMode].size;
-    CGFloat dockWidth = (fullscreen) ? 0 : CARPLAY_DOCK_WIDTH;
-    carplayDisplaySize = CGSizeMake(carplayDisplaySize.width - dockWidth, carplayDisplaySize.height);
+        objcInvoke_1(settings, @"setForeground:", 1);
+        objcInvoke_1(settings, @"setInterfaceOrientation:", desiredOrientation);
+        objcInvoke_1(settings, @"setDeviceOrientation:", desiredOrientation);
 
-    CGSize mainScreenSize = ((CGRect (*)(id, SEL, int))objc_msgSend)([UIScreen mainScreen], NSSelectorFromString(@"boundsForOrientation:"), desiredOrientation).size;
+        ((void (*)(id, SEL, CGRect))objc_msgSend)(
+            settings,
+            sel_registerName("setFrame:"),
+            sceneFrame
+        );
 
-    CGFloat largerWidth = MAX(mainScreenSize.width, carplayDisplaySize.width);
-    CGFloat largerHeight = MAX(mainScreenSize.height, carplayDisplaySize.height);
-    CGFloat widthScale = largerWidth / mainScreenSize.width;
-    CGFloat heightScale = largerHeight / mainScreenSize.height;
+        ((void (*)(id, SEL, id, id, id))objc_msgSend)(
+            appScene,
+            NSSelectorFromString(@"updateSettings:withTransitionContext:completion:"),
+            settings,
+            nil,
+            ^{}
+        );
 
-    // Special scaling when in portrait mode (because the carplay screen is always physically landscape)
-    if (UIInterfaceOrientationIsPortrait(desiredOrientation))
-    {
-        // Use half the display's width
-        widthScale = (carplayDisplaySize.width / 2) / mainScreenSize.width;
-    }
+        NSLog(@"carplayenable: scene geometry %@", settings);
+    };
 
-    NSLog(@"Scaling app view to %.2fx%.2f (target size: %.2fx%.2f)", widthScale, heightScale, carplayDisplaySize.width, carplayDisplaySize.height);
-    ((void (*)(id, SEL, CGSize, int))objc_msgSend)(self.appViewController, NSSelectorFromString(@"setContentReferenceSize:withInterfaceOrientation:"), carplayDisplaySize, desiredOrientation);
+    updateSceneGeometry();
+
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC),
+        dispatch_get_main_queue(),
+        updateSceneGeometry
+    );
 
     UIView *appView = objcInvoke(self.appViewController, @"view");
-    [appView setTransform:CGAffineTransformMakeScale(widthScale, heightScale)];
+    appView.transform = CGAffineTransformIdentity;
 
-    UIView *appContainerView = [self appContainerView];
-    CGRect rootWindowBounds = [[self rootWindow] bounds];
-    appContainerView.center = CGPointMake(CGRectGetMidX(rootWindowBounds), CGRectGetMidY(rootWindowBounds));
+    self.dockView.alpha = fullscreen ? 0.0 : 1.0;
 
-    BOOL rightHandDock = [self shouldUseRightHandDock];
-    UIView *containingView = [self appContainerView];
-    CGRect containingViewFrame = [containingView frame];
-    containingViewFrame.origin.x = (rightHandDock) ? 0 : dockWidth;
-    [containingView setFrame:containingViewFrame];
-
-    [self.dockView setAlpha: (fullscreen) ? 0 : 1];
+    NSLog(
+        @"root=%@ container=%@ sceneFrame=%@ appBounds=%@",
+        NSStringFromCGRect(rootBounds),
+        NSStringFromCGRect(self.appContainerView.bounds),
+        NSStringFromCGRect(sceneFrame),
+        NSStringFromCGRect(appView.bounds)
+    );
 
     // Update last known orientation and fullscreen status
     self.orientation = desiredOrientation;
