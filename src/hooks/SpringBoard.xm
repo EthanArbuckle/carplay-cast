@@ -234,7 +234,6 @@ Use this to prevent the App from going to sleep when other applications are laun
 
     %orig(settings, arg2, arg3);
 }
-}
 
 /*
  The scene's client getter method was removed in iOS 15 but the ivar is still accessible

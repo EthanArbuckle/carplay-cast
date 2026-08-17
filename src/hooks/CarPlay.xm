@@ -313,4 +313,5 @@ will launch their normal Carplay mode UI
         return;
     }
 
+    %init(CARPLAY);
 }
