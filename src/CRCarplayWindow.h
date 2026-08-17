@@ -16,7 +16,7 @@ id getCarplayCADisplay(void);
 @property (nonatomic, retain) NSMutableArray *observers;
 @property (nonatomic, retain) UITapGestureRecognizer *screenTapRecognizer;
 
-@property (nonatomic) int orientation;
+@property (nonatomic) UIInterfaceOrientation orientation;
 @property (nonatomic) BOOL isFullscreen;
 @property (nonatomic) BOOL shouldGenerateSnapshot;
 @property (nonatomic) BOOL drawOnMainScreen;

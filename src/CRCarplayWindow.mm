@@ -35,7 +35,7 @@ id getCarplayCADisplay(void)
         [[CRPreferences sharedInstance] reloadPreferences];
 
         // Start in landscape
-        self.orientation = 3;
+        self.orientation = UIInterfaceOrientationLandscapeLeft;
 
         self.sessionStatus = objcInvoke([objc_getClass("CARSessionStatus") alloc], @"initForCarPlayShell");
 
@@ -195,6 +195,8 @@ id getCarplayCADisplay(void)
     NSBundle *carplayBundle = [NSBundle bundleWithPath:@"/System/Library/CoreServices/CarPlay.app"];
     UITraitCollection *carplayTrait = [UITraitCollection traitCollectionWithUserInterfaceIdiom:3];
     UITraitCollection *interfaceStyleTrait = [UITraitCollection traitCollectionWithUserInterfaceStyle:1];
+    UITraitCollection *carplayTrait = [UITraitCollection traitCollectionWithUserInterfaceIdiom:(UIUserInterfaceIdiom)3];
+    UITraitCollection *interfaceStyleTrait = [UITraitCollection traitCollectionWithUserInterfaceStyle:(UIUserInterfaceStyle)1];
     UITraitCollection *traitCollection = [UITraitCollection traitCollectionWithTraitsFromCollections:@[carplayTrait, interfaceStyleTrait]];
 
     CGFloat buttonSize = 35;
@@ -237,7 +239,7 @@ id getCarplayCADisplay(void)
     {
         for (id snapshotCandidate in objcInvoke(snapshotGroup, @"snapshots"))
         {
-            int snapshotOrientation = objcInvokeT(snapshotCandidate, @"interfaceOrientation", int);
+            UIInterfaceOrientation snapshotOrientation = objcInvokeT(snapshotCandidate, @"interfaceOrientation", UIInterfaceOrientation);
             int snapshotContentType = objcInvokeT(snapshotCandidate, @"contentType", int);
             if (UIInterfaceOrientationIsLandscape(snapshotOrientation))
             {
@@ -267,7 +269,7 @@ id getCarplayCADisplay(void)
         }
     }
     // If no landscape image was found, queue up a snapshot once the app launches
-    self.shouldGenerateSnapshot = UIInterfaceOrientationIsPortrait(objcInvokeT(appSnapshot, @"interfaceOrientation", int));
+    self.shouldGenerateSnapshot = UIInterfaceOrientationIsPortrait((UIInterfaceOrientation)objcInvokeT(appSnapshot, @"interfaceOrientation", int));
 
     // Get the image from the chosen snapshot
     id appSnapshotImage = objcInvoke_1(appSnapshot, @"imageForInterfaceOrientation:", 1);
@@ -575,7 +577,7 @@ When the "rotate orientation" button is pressed on a CarplayEnabled app window
 - (void)handleRotate
 {
     LOG_LIFECYCLE_EVENT;
-    int desiredOrientation = (UIInterfaceOrientationIsLandscape(self.orientation)) ? 1 : 3;
+    UIInterfaceOrientation desiredOrientation = UIInterfaceOrientationIsLandscape(self.orientation) ? UIInterfaceOrientationPortrait : UIInterfaceOrientationLandscapeLeft;
 
     id appScene = objcInvoke(objcInvoke([self appViewController], @"sceneHandle"), @"sceneIfExists");
     if (!appScene)
@@ -593,7 +595,8 @@ When the "rotate orientation" button is pressed on a CarplayEnabled app window
 /*
 Handle resizing the Carplay App window. Called anytime the app orientation changes (including first appearance)
 */
-- (void)resizeAppViewForOrientation:(int)desiredOrientation fullscreen:(BOOL)fullscreen forceUpdate:(BOOL)forceUpdate {
+- (void)resizeAppViewForOrientation:(UIInterfaceOrientation)desiredOrientation fullscreen:(BOOL)fullscreen forceUpdate:(BOOL)forceUpdate
+{
     LOG_LIFECYCLE_EVENT;
     if (!forceUpdate && (desiredOrientation == self.orientation && self.isFullscreen == fullscreen)) {
         return;

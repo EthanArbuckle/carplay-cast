@@ -340,7 +340,7 @@ Is this a main-screen scene view for an application that is being hosted on the 
         // Draw the Carplay placeholder UI, but only if this view is being layed out in the correct orientation.
         // It is expected that this method will be called at least once while the view is in the wrong orientation
         BOOL bgIsLandscape = [backgroundView frame].size.width > [backgroundView frame].size.height;
-        BOOL deviceIsLandscape = UIInterfaceOrientationIsLandscape([[UIDevice currentDevice] orientation]);
+        BOOL deviceIsLandscape = UIInterfaceOrientationIsLandscape((UIInterfaceOrientation)[[UIDevice currentDevice] orientation]);
         if (bgIsLandscape == deviceIsLandscape)
         {
             // Orientation expectation satisfied
@@ -488,7 +488,7 @@ The relevant modes for this tweak are LiveContent (interactive app) and Placehol
 %hook UIScreen
 
 %new
-- (CGRect)boundsForOrientation:(int)orientation
+- (CGRect)boundsForOrientation:(UIInterfaceOrientation)orientation
 {
     CGFloat width = [self bounds].size.width;
     CGFloat height = [self bounds].size.height;
