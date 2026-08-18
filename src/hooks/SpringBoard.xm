@@ -252,6 +252,10 @@ than the device orientation. Force the switcher to use the device's physical ori
 
 %end
 
+/*
+This forces the keyboard to be displayed on the Carplay screen instead of the device's main screen. It also scales
+the keyboard to fit the Carplay screen's app container view.
+*/
 %hook SBMedusaHostedKeyboardWindow
 
 - (void)setHidden:(BOOL)hidden {
@@ -629,7 +633,7 @@ int hook_BKSDisplayServicesSetScreenBlanked(int arg1)
 
 %ctor
 {
-    // BAIL_IF_UNSUPPORTED_IOS;
+    BAIL_IF_UNSUPPORTED_IOS;
 
     if ([[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.springboard"])
     {

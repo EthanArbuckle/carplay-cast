@@ -100,7 +100,7 @@ Include all User applications on the CarPlay dashboard
         id appState = objcInvoke(appProxy, @"appState");
         if (objcInvokeT(appState, @"isValid", int) == 1)
         {
-           objcInvoke_2(allAppsLibrary, @"addApplicationProxy:withOverrideURL:", appProxy, 0);
+            objcInvoke_2(allAppsLibrary, @"addApplicationProxy:withOverrideURL:", appProxy, 0);
         }
     }
 
@@ -307,7 +307,7 @@ will launch their normal Carplay mode UI
 
 
 %ctor {
-    // BAIL_IF_UNSUPPORTED_IOS;
+    BAIL_IF_UNSUPPORTED_IOS;
 
     if (![[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.CarPlayApp"]) {
         return;

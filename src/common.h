@@ -5,9 +5,13 @@
 #include "CRPreferences.h"
 #include <substrate.h>
 
+#define MIN_SUPPORTED_IOS_MAJOR 16
+#define MAX_SUPPORTED_IOS_MAJOR 16
+
 #define BAIL_IF_UNSUPPORTED_IOS { \
-    if ([[[UIDevice currentDevice] systemVersion] compare:@"18.0" options:NSNumericSearch] == NSOrderedAscending) \
-    { \
+    NSInteger majorVersion = [NSProcessInfo processInfo].operatingSystemVersion.majorVersion; \
+    if (majorVersion < MIN_SUPPORTED_IOS_MAJOR || majorVersion > MAX_SUPPORTED_IOS_MAJOR) { \
+        NSLog(@"Unsupported iOS version: %ld.x (supported: %d.x-%d.x)", (long)majorVersion, MIN_SUPPORTED_IOS_MAJOR, MAX_SUPPORTED_IOS_MAJOR); \
         return; \
     } \
 }
@@ -44,11 +48,6 @@ __unused static void LogSelectorError(id object, SEL selector) {
     Method      _m   = _obj ? class_getInstanceMethod(object_getClass(_obj), _sel) : NULL; \
     _m ? ((t (*)(id, SEL))objc_msgSend)(_obj, _sel) : (LogSelectorError(_obj, _sel), (t)0); \
 })
-
-// #define objcInvokeT(a, b, t) \
-//     ([a respondsToSelector:NSSelectorFromString(b)] ? \
-//     ((t (*)(id, SEL))objc_msgSend)(a, NSSelectorFromString(b)) : \
-//     (LogSelectorError(a, NSSelectorFromString(b)), (t)0))
 
 #define objcInvoke(a, b) objcInvokeT(a, b, id)
 #define objcInvoke_1(a, b, c) ((id (*)(id, SEL, typeof(c)))objc_msgSend)(a, NSSelectorFromString(b), c)
