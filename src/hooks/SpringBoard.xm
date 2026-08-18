@@ -195,43 +195,25 @@ happen while the device is in a faceup/facedown orientation.
 /*
 Called when something is trying to change a scene's settings (including sending it to background/foreground).
 Use this to prevent the App from going to sleep when other applications are launched on the main screen.
-*/- (void)updateSettings:(id)settings withTransitionContext:(id)arg2 completion:(id)arg3
+*/
+- (void)updateSettings:(id)settings withTransitionContext:(id)arg2 completion:(id)arg3
 {
     id sceneClient = objcInvoke(self, @"client");
-
     if ([sceneClient respondsToSelector:NSSelectorFromString(@"process")]) {
-        NSString *sceneAppBundleID = objcInvoke(
-            objcInvoke(sceneClient, @"process"),
-            @"bundleIdentifier"
-        );
+        NSString *sceneAppBundleID = objcInvoke(objcInvoke(sceneClient, @"process"), @"bundleIdentifier");
 
-        NSArray *lockAssertions = objc_getAssociatedObject(
-            [UIApplication sharedApplication],
-            &kPropertyKey_lockAssertionIdentifiers
-        );
-
-        if ([lockAssertions containsObject:sceneAppBundleID] &&
-            [settings isKindOfClass:objc_getClass("UIMutableApplicationSceneSettings")]) {
+        NSArray *lockAssertions = objc_getAssociatedObject([UIApplication sharedApplication], &kPropertyKey_lockAssertionIdentifiers);
+        if ([lockAssertions containsObject:sceneAppBundleID] && [settings isKindOfClass:objc_getClass("UIMutableApplicationSceneSettings")]) {
 
             objcInvoke_1(settings, @"setForeground:", @(1));
             objcInvoke_1(settings, @"setInterfaceOrientation:", @(UIInterfaceOrientationLandscapeLeft));
             objcInvoke_1(settings, @"setDeviceOrientation:", @(UIInterfaceOrientationLandscapeLeft));
 
-            id liveCarplayWindow = objcInvoke(
-                [UIApplication sharedApplication],
-                @"liveCarplayWindow"
-            );
-
+            id liveCarplayWindow = objcInvoke([UIApplication sharedApplication], @"liveCarplayWindow");
             UIView *container = [liveCarplayWindow appContainerView];
-
             if (container) {
                 CGRect frame = container.bounds;
-
-                ((void (*)(id, SEL, CGRect))objc_msgSend)(
-                    settings,
-                    sel_registerName("setFrame:"),
-                    frame
-                );
+                ((void (*)(id, SEL, CGRect))objc_msgSend)(settings, sel_registerName("setFrame:"), frame);
             }
         }
     }
@@ -272,192 +254,88 @@ than the device orientation. Force the switcher to use the device's physical ori
 
 %hook SBMedusaHostedKeyboardWindow
 
-- (void)setHidden:(BOOL)hidden
-{
+- (void)setHidden:(BOOL)hidden {
     static char kCarplayKeyboardContainerKey;
 
     UIWindow *keyboardWindow = (UIWindow *)self;
 
-    id liveCarplayWindow = objcInvoke(
-        [UIApplication sharedApplication],
-        @"liveCarplayWindow"
-    );
-
-    if (!liveCarplayWindow)
-    {
-        UIView *keyboardContainer =
-            objc_getAssociatedObject(
-                self,
-                &kCarplayKeyboardContainerKey
-            );
-
-        if (keyboardContainer)
-        {
+    id liveCarplayWindow = objcInvoke([UIApplication sharedApplication], @"liveCarplayWindow");
+    if (!liveCarplayWindow) {
+        UIView *keyboardContainer = objc_getAssociatedObject(self, &kCarplayKeyboardContainerKey);
+        if (keyboardContainer) {
             [keyboardContainer removeFromSuperview];
-
-            objc_setAssociatedObject(
-                self,
-                &kCarplayKeyboardContainerKey,
-                nil,
-                OBJC_ASSOCIATION_RETAIN_NONATOMIC
-            );
+            objc_setAssociatedObject(self, &kCarplayKeyboardContainerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
 
         %orig(hidden);
         return;
     }
 
-    UIWindow *carplayRootWindow =
-        (UIWindow *)objcInvoke(
-            liveCarplayWindow,
-            @"rootWindow"
-        );
-
-    UIView *appContainerView =
-        (UIView *)objcInvoke(
-            liveCarplayWindow,
-            @"appContainerView"
-        );
-
-    if (!carplayRootWindow || !appContainerView)
-    {
+    UIWindow *carplayRootWindow = (UIWindow *)objcInvoke(liveCarplayWindow, @"rootWindow");
+    UIView *appContainerView = (UIView *)objcInvoke(liveCarplayWindow, @"appContainerView");
+    if (!carplayRootWindow || !appContainerView) {
         %orig(hidden);
         return;
     }
 
-    id presenter = getIvar(
-        self,
-        @"_remoteHostedKeyboardScenePresenter"
-    );
-
-    if (!presenter ||
-        ![presenter respondsToSelector:
-            sel_registerName("presentationView")])
-    {
+    id presenter = getIvar(self, @"_remoteHostedKeyboardScenePresenter");
+    if (!presenter || ![presenter respondsToSelector:sel_registerName("presentationView")]) {
         %orig(hidden);
         return;
     }
 
-    UIView *presentationView =
-        (UIView *)objcInvoke(
-            presenter,
-            @"presentationView"
-        );
-
-    if (!presentationView)
-    {
+    UIView *presentationView = (UIView *)objcInvoke(presenter, @"presentationView");
+    if (!presentationView) {
         %orig(hidden);
         return;
     }
 
     %orig(NO);
 
-    CGRect targetFrame = [
-        appContainerView.superview
-        convertRect:appContainerView.frame
-        toView:carplayRootWindow
-    ];
+    CGRect targetFrame = [appContainerView.superview convertRect:appContainerView.frame toView:carplayRootWindow];
 
     CGSize sourceSize = presentationView.bounds.size;
-
-    if (sourceSize.width <= 0.0 ||
-        sourceSize.height <= 0.0)
-    {
+    if (sourceSize.width <= 0.0 || sourceSize.height <= 0.0) {
         sourceSize = keyboardWindow.bounds.size;
     }
 
     const CGFloat sourceKeyboardHeight = 260.0;
-
-    CGFloat scaleX =
-        targetFrame.size.width / sourceSize.width;
-
-    CGFloat wantedKeyboardHeight =
-        targetFrame.size.height * 0.78;
-
-    CGFloat scaleY =
-        wantedKeyboardHeight / sourceKeyboardHeight;
-
-    if (scaleY > scaleX)
-    {
+    CGFloat scaleX = targetFrame.size.width / sourceSize.width;
+    CGFloat wantedKeyboardHeight = targetFrame.size.height * 0.78;
+    CGFloat scaleY = wantedKeyboardHeight / sourceKeyboardHeight;
+    if (scaleY > scaleX) {
         scaleY = scaleX;
     }
 
-    CGFloat keyboardHeight =
-        sourceKeyboardHeight * scaleY;
+    CGFloat keyboardHeight = sourceKeyboardHeight * scaleY;
 
-    UIView *keyboardContainer =
-        objc_getAssociatedObject(
-            self,
-            &kCarplayKeyboardContainerKey
-        );
-
-    if (!keyboardContainer)
-    {
-        keyboardContainer =
-            [[UIView alloc] initWithFrame:CGRectZero];
-
-        keyboardContainer.backgroundColor =
-            [UIColor clearColor];
-
+    UIView *keyboardContainer = objc_getAssociatedObject(self, &kCarplayKeyboardContainerKey);
+    if (!keyboardContainer) {
+        keyboardContainer = [[UIView alloc] initWithFrame:CGRectZero];
+        keyboardContainer.backgroundColor = [UIColor clearColor];
         keyboardContainer.clipsToBounds = YES;
         keyboardContainer.userInteractionEnabled = YES;
-
-        objc_setAssociatedObject(
-            self,
-            &kCarplayKeyboardContainerKey,
-            keyboardContainer,
-            OBJC_ASSOCIATION_RETAIN_NONATOMIC
-        );
+        objc_setAssociatedObject(self, &kCarplayKeyboardContainerKey, keyboardContainer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 
-    if (keyboardContainer.superview != carplayRootWindow)
-    {
+    if (keyboardContainer.superview != carplayRootWindow){
         [keyboardContainer removeFromSuperview];
         [carplayRootWindow addSubview:keyboardContainer];
-
-        NSLog(
-            @"carplayenable: moved keyboard container to new CarPlay root %@",
-            carplayRootWindow
-        );
+        NSLog(@"carplayenable: moved keyboard container to new CarPlay root %@", carplayRootWindow);
     }
 
     keyboardContainer.hidden = NO;
+    keyboardContainer.frame = CGRectMake(targetFrame.origin.x, CGRectGetMaxY(targetFrame) - keyboardHeight, targetFrame.size.width, keyboardHeight);
 
-    keyboardContainer.frame = CGRectMake(
-        targetFrame.origin.x,
-        CGRectGetMaxY(targetFrame) - keyboardHeight,
-        targetFrame.size.width,
-        keyboardHeight
-    );
-
-    if (presentationView.superview != keyboardContainer)
-    {
+    if (presentationView.superview != keyboardContainer) {
         [presentationView removeFromSuperview];
         [keyboardContainer addSubview:presentationView];
     }
 
-    presentationView.transform =
-        CGAffineTransformIdentity;
-
-    presentationView.bounds = CGRectMake(
-        0,
-        0,
-        sourceSize.width,
-        sourceSize.height
-    );
-
-    presentationView.center = CGPointMake(
-        keyboardContainer.bounds.size.width / 2.0,
-        keyboardContainer.bounds.size.height -
-            ((sourceSize.height * scaleY) / 2.0)
-    );
-
-    presentationView.transform =
-        CGAffineTransformMakeScale(
-            scaleX,
-            scaleY
-        );
-
+    presentationView.transform = CGAffineTransformIdentity;
+    presentationView.bounds = CGRectMake(0, 0, sourceSize.width, sourceSize.height);
+    presentationView.center = CGPointMake(keyboardContainer.bounds.size.width / 2.0, keyboardContainer.bounds.size.height - ((sourceSize.height * scaleY) / 2.0));
+    presentationView.transform = CGAffineTransformMakeScale(scaleX, scaleY);
     presentationView.hidden = NO;
     presentationView.alpha = 1.0;
     presentationView.userInteractionEnabled = YES;
